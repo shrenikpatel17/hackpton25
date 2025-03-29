@@ -10,15 +10,26 @@ interface UserData {
   firstName: string;
   lastName: string;
   email: string;
-  sessions: any[];
+  sessions: string[];
   blinkRate: number;
   lookAwayRate: number;
   moveBackRate: number;
   createdAt: string;
 }
 
+interface SessionData {
+  date: string;
+  timeStart: string;
+  timeEnd: string;
+  blinkRate: number;
+  ambientLight: string;
+  eyePosition: string;
+  eyeDistance: number;
+}
+
 export default function DashboardPage() {
   const [user, setUser] = useState<UserData | null>(null);
+  const [sessions, setSessions] = useState<SessionData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
@@ -103,7 +114,7 @@ export default function DashboardPage() {
         }
     }
 
-    // Fetch user data
+    // Fetch user data and sessions
     async function fetchUserData() {
       try {
         const response = await fetch('/api/auth/user');
@@ -116,6 +127,15 @@ export default function DashboardPage() {
         }
         const data = await response.json();
         setUser(data);
+
+        // Fetch sessions data if user has sessions
+        if (data.sessionIds && data.sessionIds.length > 0) {
+          const sessionsResponse = await fetch('/api/sessions');
+          if (sessionsResponse.ok) {
+            const sessionsData = await sessionsResponse.json();
+            setSessions(sessionsData);
+          }
+        }
 
         // Initialize push notifications after user data is loaded
         await initializePushNotifications();
@@ -202,12 +222,29 @@ export default function DashboardPage() {
 
             <div className="bg-white/10 backdrop-blur-md p-8 rounded-xl">
               <h2 className="text-2xl font-bold text-white mb-4">Recent Sessions</h2>
-              {user.sessions.length > 0 ? (
+              {sessions.length > 0 ? (
                 <div className="space-y-4">
-                  {user.sessions.slice(0, 5).map((session, index) => (
+                  {sessions.slice(0, 5).map((session, index) => (
                     <div key={index} className="p-4 bg-white/5 rounded-lg">
-                      <p className="text-white">Session {user.sessions.length - index}</p>
-                      {/* Add more session details here once you have the data structure */}
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <p className="text-white font-medium">
+                            Session {sessions.length - index}
+                          </p>
+                          <p className="text-gray-300 text-sm">
+                            {new Date(session.date).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-white">
+                            {new Date(session.timeStart).toLocaleTimeString()} - 
+                            {new Date(session.timeEnd).toLocaleTimeString()}
+                          </p>
+                          <p className="text-gray-300 text-sm">
+                            Blink Rate: {session.blinkRate} blinks/min
+                          </p>
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
