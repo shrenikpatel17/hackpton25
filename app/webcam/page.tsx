@@ -15,6 +15,7 @@ export default function WebcamPage() {
   const [isBlinking, setIsBlinking] = useState(false);
   const [ambientLight, setAmbientLight] = useState<string>("unknown");
   const [distance, setDistance] = useState<number | string>("unknown");
+  const [sessionStart, setSessionStart] = useState<number | null>(null);
 
   const startWebcam = async () => {
     try {
@@ -26,6 +27,7 @@ export default function WebcamPage() {
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         setIsStreaming(true);
+        setSessionStart(Date.now());
       }
     } catch (err) {
       console.error("Error accessing webcam:", err);
@@ -33,29 +35,95 @@ export default function WebcamPage() {
     }
   };
 
-  const stopWebcam = () => {
+  const saveSession = async () => {
+    try {
+      console.log("Saving session data...");
+      
+      // First, fetch the session data from Python backend
+      const response = await fetch('/api/py/session-data');
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch session data: ${response.status} ${response.statusText}`);
+      }
+      
+      const sessionData = await response.json();
+      console.log("Session data retrieved:", sessionData);
+      
+      // Get the user data to get the user ID
+      let userId = null;
+      try {
+        const userResponse = await fetch('/api/auth/user');
+        if (userResponse.ok) {
+          const userData = await userResponse.json();
+          userId = userData._id; // Assuming the ID is available at _id
+          console.log("Got user ID:", userId);
+        } else {
+          console.log("User not authenticated, saving session without user ID");
+        }
+      } catch (userError) {
+        console.error("Error fetching user data:", userError);
+        // Continue without user ID
+      }
+      
+      // Now save the session with or without the user ID
+      const saveResponse = await fetch('/api/sessions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          directionChanges: sessionData.direction_changes,
+          blinkTimestamps: sessionData.blink_timestamps,
+          stateChanges: sessionData.state_changes,
+          distanceChanges: sessionData.distance_changes,
+          startTime: new Date().toISOString(),
+          userId: userId // Include the user ID if available
+        }),
+      });
+      
+      if (!saveResponse.ok) {
+        const errorData = await saveResponse.json();
+        throw new Error(`Failed to save session: ${errorData.message || saveResponse.statusText}`);
+      }
+      
+      const result = await saveResponse.json();
+      console.log("Session saved successfully:", result);
+      
+      alert("Session data saved successfully!");
+      
+    } catch (error: any) {
+      console.error("Error saving session:", error);
+      alert(`Failed to save session data: ${error.message}`);
+    }
+  };
+
+  const stopWebcam = async () => {
     if (videoRef.current && videoRef.current.srcObject) {
       const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
       tracks.forEach(track => track.stop());
       videoRef.current.srcObject = null;
       setIsStreaming(false);
-    }
-    // Clear all intervals
-    if (directionIntervalRef.current) {
-      clearInterval(directionIntervalRef.current);
-      directionIntervalRef.current = null;
-    }
-    if (blinkIntervalRef.current) {
-      clearInterval(blinkIntervalRef.current);
-      blinkIntervalRef.current = null;
-    }
-    if (ambientLightIntervalRef.current) {
-      clearInterval(ambientLightIntervalRef.current);
-      ambientLightIntervalRef.current = null;
-    }
-    if (distanceIntervalRef.current) {
-      clearInterval(distanceIntervalRef.current);
-      distanceIntervalRef.current = null;
+
+      await saveSession();
+
+      if (directionIntervalRef.current) {
+        clearInterval(directionIntervalRef.current);
+        directionIntervalRef.current = null;
+      }
+      if (blinkIntervalRef.current) {
+        clearInterval(blinkIntervalRef.current);
+        blinkIntervalRef.current = null;
+      }
+      if (ambientLightIntervalRef.current) {
+        clearInterval(ambientLightIntervalRef.current);
+        ambientLightIntervalRef.current = null;
+      }
+      if (distanceIntervalRef.current) {
+        clearInterval(distanceIntervalRef.current);
+        distanceIntervalRef.current = null;
+      }
+
+      setSessionStart(null);
     }
   };
 
@@ -66,14 +134,11 @@ export default function WebcamPage() {
       const context = canvas.getContext('2d');
 
       if (context) {
-        // Set canvas dimensions to match video
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         
-        // Draw the current frame on the canvas
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
         
-        // Convert the frame to base64
         const frame = canvas.toDataURL('image/jpeg', 0.8);
         return frame;
       }
@@ -112,12 +177,10 @@ export default function WebcamPage() {
     }
   };
 
-  // Start frame capture when streaming begins
   useEffect(() => {
     if (isStreaming) {
       console.log("Starting frame capture intervals");
       
-      // Eye direction detection interval (1000ms)
       directionIntervalRef.current = setInterval(() => {
         const frame = captureFrame();
         if (frame) {
@@ -125,7 +188,6 @@ export default function WebcamPage() {
         }
       }, 1000);
 
-      // Blink detection interval (10ms)
       blinkIntervalRef.current = setInterval(() => {
         const frame = captureFrame();
         if (frame) {
@@ -133,7 +195,6 @@ export default function WebcamPage() {
         }
       }, 10);
 
-      // Ambient light detection interval (1000ms)
       ambientLightIntervalRef.current = setInterval(() => {
         const frame = captureFrame();
         if (frame) {
@@ -141,7 +202,6 @@ export default function WebcamPage() {
         }
       }, 1000);
 
-      // Distance detection interval (1000ms)
       distanceIntervalRef.current = setInterval(() => {
         const frame = captureFrame();
         if (frame) {
@@ -150,7 +210,6 @@ export default function WebcamPage() {
       }, 500);
     }
 
-    // Cleanup function
     return () => {
       if (directionIntervalRef.current) {
         clearInterval(directionIntervalRef.current);
@@ -171,12 +230,45 @@ export default function WebcamPage() {
     };
   }, [isStreaming]);
 
-  // Cleanup on component unmount
   useEffect(() => {
     return () => {
       stopWebcam();
     };
   }, []);
+
+  const calculateBlinkRate = (timestamps: number[]): number => {
+    if (timestamps.length < 2) return 0;
+    const duration = (timestamps[timestamps.length - 1] - timestamps[0]) / 60;
+    return timestamps.length / duration;
+  };
+
+  const calculateLookAwayTime = (changes: Array<{looking_away: number, timestamp: number}>): number => {
+    let totalTime = 0;
+    for (let i = 0; i < changes.length - 1; i++) {
+      if (changes[i].looking_away === 1) {
+        totalTime += changes[i + 1].timestamp - changes[i].timestamp;
+      }
+    }
+    return totalTime;
+  };
+
+  const calculateAverageDistance = (changes: Array<{distance: string, start_time: number, end_time: number}>): number => {
+    if (changes.length === 0) return 0;
+    
+    let totalWeightedDistance = 0;
+    let totalTime = 0;
+    
+    changes.forEach(change => {
+      const duration = change.end_time - change.start_time;
+      const distanceValue = change.distance === 'close' ? 40 : 
+                           change.distance === 'med' ? 75 : 110;
+      
+      totalWeightedDistance += distanceValue * duration;
+      totalTime += duration;
+    });
+    
+    return totalWeightedDistance / totalTime;
+  };
 
   return (
     <>

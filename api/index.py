@@ -33,6 +33,7 @@ print("Starting FastAPI server...")
 
 blink_timestamps = []
 blink_counter = 0
+is_currently_blinking = False  # Track if the user is currently in a blinking state
 
 # Correct the dictionary by providing a value for "timestamp"
 amb_light_data = {"ambient_light": "light", "timestamp": None}
@@ -272,7 +273,7 @@ def process_ambient_light(frame):
 
 
 def detect_blink(face_landmarks, img_w, img_h):
-    global blink_timestamps, blink_counter
+    global blink_timestamps, blink_counter, is_currently_blinking
     """
     Detect if the person is blinking by calculating the eye aspect ratio (EAR)
     Returns: Object with blinks and blink_timestamps
@@ -307,25 +308,31 @@ def detect_blink(face_landmarks, img_w, img_h):
     
     # Average EAR of both eyes
     avg_ear = (left_ear + right_ear) / 2.0
-
-    #print(f"Left EAR: {left_ear:.3f}, Right EAR: {right_ear:.3f}, Avg EAR: {avg_ear:.3f}")
     
     # Dynamic threshold adjustment based on current average EAR (could be optimized with training)
     EAR_THRESHOLD = 0.25  # Threshold decreases when the person is blinking more
-    #print(f"Adjusted EAR Threshold: {EAR_THRESHOLD:.3f}")
     
     # Convert numpy.bool_ to Python bool before returning
     is_blinking = bool(avg_ear < EAR_THRESHOLD)  # Convert to Python bool
 
-    if is_blinking:
-        # Only append timestamp if this is the start of a new blink
-        current_time = time.time()
-        # Only append if enough time has passed since last blink (0.5s threshold)
+    current_time = time.time()
+    
+    # Check if this is the start of a new blink
+    if is_blinking and not is_currently_blinking:
+        # Only count this as a new blink if enough time has passed since the last blink
         if not blink_timestamps or current_time - blink_timestamps[-1] >= 0.25:
             blink_counter += 1
-            blink_timestamps.append(time.time())
-            print(f"Blink detected! EAR: {avg_ear:.3f}")
-    print(blink_counter)
+            blink_timestamps.append(current_time)
+            print(f"Blink detected! EAR: {avg_ear:.3f}, Count: {blink_counter}")
+        
+        # Update the blinking state
+        is_currently_blinking = True
+    
+    # If the person is not blinking anymore, update the state
+    elif not is_blinking and is_currently_blinking:
+        is_currently_blinking = False
+        print("Blink ended")
+        
     return {
         "is_blinking": is_blinking,
         "blink_timestamps": blink_timestamps
@@ -378,7 +385,7 @@ async def detect_direction(request: Request):
 
 @app.post("/api/py/detect-blink")
 async def detect_blink_endpoint(request: Request):
-    global blink_timestamps, blink_counter
+    global blink_timestamps, blink_counter, is_currently_blinking
     try:
         # Get the frame data from the request
         data = await request.json()
@@ -565,4 +572,87 @@ async def check_distance_endpoint(request: Request):
 @app.get("/api/py/helloFastApi")
 def hello_fast_api():
     return {"message": "Hello from FastAPI"}
+
+# Add this function to format session data
+def format_session_data():
+    global blink_timestamps, direction_changes, state_changes, distance_changes
+    
+    # Add final distance change if exists
+    if last_known_distance_state is not None:
+        current_time = time.time()
+        distance_changes.append({
+            "distance": last_known_distance_state,
+            "start_time": state_start_time,
+            "end_time": current_time
+        })
+
+    session_data = {
+        "directionChanges": direction_changes,
+        "blinkTimestamps": blink_timestamps,
+        "lightStateChanges": state_changes,
+        "distanceChanges": distance_changes,
+        "stats": {
+            "totalBlinks": len(blink_timestamps),
+            "avgBlinkRate": calculate_blink_rate(blink_timestamps),
+            "totalLookAwayTime": calculate_look_away_time(direction_changes),
+            "avgDistance": calculate_avg_distance(distance_changes)
+        }
+    }
+    
+    return session_data
+
+def calculate_blink_rate(blink_timestamps):
+    if not blink_timestamps:
+        return 0
+    duration = blink_timestamps[-1] - blink_timestamps[0]
+    minutes = duration / 60
+    return len(blink_timestamps) / minutes if minutes > 0 else 0
+
+def calculate_look_away_time(direction_changes):
+    total_time = 0
+    for i in range(len(direction_changes)-1):
+        if direction_changes[i]["looking_away"] == 1:
+            total_time += direction_changes[i+1]["timestamp"] - direction_changes[i]["timestamp"]
+    return total_time
+
+def calculate_avg_distance(distance_changes):
+    if not distance_changes:
+        return 0
+    total_distance = 0
+    total_time = 0
+    for change in distance_changes:
+        duration = change["end_time"] - change["start_time"]
+        # Convert distance string to numeric value
+        if change["distance"] == "close":
+            dist_value = 40
+        elif change["distance"] == "med":
+            dist_value = 75
+        else:  # far
+            dist_value = 110
+        total_distance += dist_value * duration
+        total_time += duration
+    return total_distance / total_time if total_time > 0 else 0
+
+# Add a new endpoint to get session data
+@app.get("/api/py/session-data")
+async def get_session_data():
+    global direction_changes, blink_timestamps, state_changes, distance_changes
+    try:
+        # Store current blink timestamps to return
+        current_blink_timestamps = blink_timestamps.copy()
+        
+        response_data = {
+            "direction_changes": direction_changes,
+            "blink_timestamps": current_blink_timestamps,
+            "state_changes": state_changes,
+            "distance_changes": distance_changes
+        }
+        
+        # Reset data for next session
+        blink_timestamps = []
+        
+        return response_data
+    except Exception as e:
+        print(f"Error getting session data: {str(e)}")
+        return {"error": str(e), "status": "error"}
 
