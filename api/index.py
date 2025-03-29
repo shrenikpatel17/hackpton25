@@ -56,27 +56,58 @@ firebase_admin.initialize_app(cred)
 # Store FCM tokens
 fcm_tokens: Dict[str, str] = {}
 
+# Variables for notification debouncing
+DISTANCE_NOTIFICATION_COOLDOWN = 30  # Seconds between notifications
+last_distance_notification_time = 0
+
+# Function to send distance warning notification
+def send_distance_warning_notification():
+    global last_distance_notification_time
+    current_time = time.time()
+    
+    # Check if enough time has passed since the last notification
+    if current_time - last_distance_notification_time < DISTANCE_NOTIFICATION_COOLDOWN:
+        return
+    
+    try:
+        for token in fcm_tokens.values():
+            message = messaging.Message(
+                notification=messaging.Notification(
+                    title="Distance Warning",
+                    body="You're too close to the screen! Please lean back for better posture."
+                ),
+                token=token
+            )
+            try:
+                messaging.send(message)
+                print(f"Distance warning notification sent successfully to token: {token[:10]}...")
+                last_distance_notification_time = current_time  # Update last notification time
+            except Exception as e:
+                print(f"Failed to send distance warning notification to token {token[:10]}...: {str(e)}")
+    except Exception as e:
+        print(f"Error sending distance warning notification: {str(e)}")
+
 # Background notification task
 async def send_notifications():
     print("Starting notification service...")
     while True:
         try:
             # Create a list to store coroutines
-            tasks = []
-            for token in fcm_tokens.values():
-                message = messaging.Message(
-                    notification=messaging.Notification(
-                        title="Posture Check",
-                        body="Remember to lean back and maintain good posture!"
-                    ),
-                    token=token
-                )
-                try:
-                    # Send message synchronously since firebase-admin doesn't support async
-                    messaging.send(message)
-                    print(f"Notification sent successfully to token: {token[:10]}...")
-                except Exception as e:
-                    print(f"Failed to send notification to token {token[:10]}...: {str(e)}")
+            # tasks = []
+            # for token in fcm_tokens.values():
+            #     message = messaging.Message(
+            #         notification=messaging.Notification(
+            #             title="Posture Check",
+            #             body="Remember to lean back and maintain good posture!"
+            #         ),
+            #         token=token
+            #     )
+            #     try:
+            #         # Send message synchronously since firebase-admin doesn't support async
+            #         messaging.send(message)
+            #         print(f"Notification sent successfully to token: {token[:10]}...")
+            #     except Exception as e:
+            #         print(f"Failed to send notification to token {token[:10]}...: {str(e)}")
             
             # Wait for 10 seconds before sending next batch
             await asyncio.sleep(10)
@@ -469,6 +500,8 @@ def check_distance(frame):
         # Determine the current distance state
         if distance < 50:
             current_distance_state = "close"
+            # Send notification when user is too close
+            send_distance_warning_notification()
         elif 50 <= distance <= 100:
             current_distance_state = "med"
         else:
