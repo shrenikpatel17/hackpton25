@@ -9,10 +9,12 @@ export default function WebcamPage() {
   const directionIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const blinkIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const ambientLightIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const distanceIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [eyeDirection, setEyeDirection] = useState<string>("unknown");
   const [isBlinking, setIsBlinking] = useState(false);
   const [ambientLight, setAmbientLight] = useState<string>("unknown");
+  const [distance, setDistance] = useState<number | string>("unknown");
 
   const startWebcam = async () => {
     try {
@@ -50,6 +52,10 @@ export default function WebcamPage() {
     if (ambientLightIntervalRef.current) {
       clearInterval(ambientLightIntervalRef.current);
       ambientLightIntervalRef.current = null;
+    }
+    if (distanceIntervalRef.current) {
+      clearInterval(distanceIntervalRef.current);
+      distanceIntervalRef.current = null;
     }
   };
 
@@ -98,6 +104,8 @@ export default function WebcamPage() {
         setIsBlinking(data.is_blinking || false);
       } else if (endpoint === '/api/py/detect-ambient-light') {
         setAmbientLight(data.amb_light || "unknown");
+      } else if (endpoint === '/api/py/check-distance') {
+        setDistance(data.distance_cm || "unknown");
       }
     } catch (error) {
       console.error('Error sending frame to API:', error);
@@ -132,6 +140,14 @@ export default function WebcamPage() {
           sendFrameToAPI(frame, '/api/py/detect-ambient-light');
         }
       }, 1000);
+
+      // Distance detection interval (1000ms)
+      distanceIntervalRef.current = setInterval(() => {
+        const frame = captureFrame();
+        if (frame) {
+          sendFrameToAPI(frame, '/api/py/check-distance');
+        }
+      }, 500);
     }
 
     // Cleanup function
@@ -147,6 +163,10 @@ export default function WebcamPage() {
       if (ambientLightIntervalRef.current) {
         clearInterval(ambientLightIntervalRef.current);
         ambientLightIntervalRef.current = null;
+      }
+      if (distanceIntervalRef.current) {
+        clearInterval(distanceIntervalRef.current);
+        distanceIntervalRef.current = null;
       }
     };
   }, [isStreaming]);
@@ -169,9 +189,10 @@ export default function WebcamPage() {
                 optiq
               </Link>
             </div>
-            <Link href="/">
+
+            <Link href="/dashboard">
               <button className="px-4 py-2 bg-white text-black rounded-lg font-medium hover:bg-gray-100 transition-colors">
-                Back to Home
+                Dashboard
               </button>
             </Link>
           </div>
@@ -180,7 +201,7 @@ export default function WebcamPage() {
 
       <div className="min-h-screen bg-[#111E3B] flex flex-col items-center justify-center px-24 pt-32">
         <div className="text-center mb-12">
-          <div className="grid grid-cols-3 gap-8 mb-2">
+          <div className="grid grid-cols-4 gap-8 mb-2">
             <div className="text-gray-300">
               Looking: <span className="text-white font-medium">{eyeDirection}</span>
             </div>
@@ -192,6 +213,11 @@ export default function WebcamPage() {
             <div className="text-gray-300">
               Ambient Light: <span className="text-white font-medium">
                 {ambientLight.toUpperCase()}
+              </span>
+            </div>
+            <div className="text-gray-300">
+              Distance: <span className="text-white font-medium">
+                {typeof distance === 'number' ? `${distance.toFixed(1)} cm` : distance}
               </span>
             </div>
           </div>
