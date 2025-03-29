@@ -46,4 +46,4 @@ venv
 .firebase-credentials.json
 firebase-credentials.json
 package-lock.json
-
+myenv/
