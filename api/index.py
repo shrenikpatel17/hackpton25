@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 import cv2
 import numpy as np
@@ -7,6 +7,11 @@ import base64
 import json
 import time
 from fastapi import HTTPException
+import firebase_admin
+from firebase_admin import credentials, messaging
+import asyncio
+import os
+from typing import Dict
 
 ### Create FastAPI instance with custom docs and openapi url
 app = FastAPI(docs_url="/api/py/docs", openapi_url="/api/py/openapi.json")
@@ -23,6 +28,52 @@ state_changes = []  # List to store state changes
 
 direction_changes = []  # List to store direction changes
 last_known_direction = None  # Initialize the last known direction
+
+
+# Initialize Firebase Admin SDK
+cred = credentials.Certificate("firebase-credentials.json")
+firebase_admin.initialize_app(cred)
+
+# Store FCM tokens
+fcm_tokens: Dict[str, str] = {}
+
+# Background notification task
+async def send_notifications():
+    while True:
+        try:
+            for token in fcm_tokens.values():
+                message = messaging.Message(
+                    notification=messaging.Notification(
+                        title="Posture Check",
+                        body="Remember to lean back and maintain good posture!"
+                    ),
+                    token=token
+                )
+                messaging.send(message)
+            await asyncio.sleep(30)  # Wait for 30 seconds
+        except Exception as e:
+            print(f"Error sending notification: {str(e)}")
+            await asyncio.sleep(30)  # Still wait even if there's an error
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(send_notifications())
+
+@app.post("/api/py/register-fcm-token")
+async def register_fcm_token(request: Request):
+    try:
+        data = await request.json()
+        user_id = data.get("userId", "default")
+        token = data.get("token")
+        
+        if not token:
+            raise HTTPException(status_code=400, detail="FCM token is required")
+        
+        fcm_tokens[user_id] = token
+        return {"message": "FCM token registered successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # Add CORS middleware
 app.add_middleware(
@@ -349,6 +400,73 @@ async def detect_ambient_light_endpoint(request: Request):
         print(f"Error processing frame for ambient light: {str(e)}")
         return {"error": str(e), "status": "error"}
 
+def check_distance(frame):
+    """
+    Calculate the distance between user and screen using facial landmarks.
+    Returns distance in centimeters
+    """
+    # Define key point indices (MediaPipe face mesh indices)
+    FOREHEAD_TOP = 10    # Forehead top key point
+    NOSE_TIP = 4         # Nose tip key point
+    REAL_VERTICAL_DISTANCE = 8.0  # Actual vertical distance from forehead to nose tip (in centimeters, needs user measurement)
+    FOCAL_LENGTH = 700            # Example value, needs recalibration!
+
+    print("Running check_distance")
+    # Convert image format and detect facial key points
+    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    results = face_mesh.process(rgb_frame)
+
+    distance = None
+
+    if results.multi_face_landmarks:
+        face_landmarks = results.multi_face_landmarks[0]
+
+        # Get key point coordinates
+        forehead = face_landmarks.landmark[FOREHEAD_TOP]
+        nose_tip = face_landmarks.landmark[NOSE_TIP]
+
+        # Calculate vertical pixel distance (forehead to nose tip)
+        ih, iw, _ = frame.shape
+        y1 = int(forehead.y * ih)  # Forehead Y coordinate
+        y2 = int(nose_tip.y * ih)   # Nose tip Y coordinate
+        pixel_distance = abs(y2 - y1)
+
+        # Calculate actual distance
+        if pixel_distance > 0:
+            distance = (REAL_VERTICAL_DISTANCE * FOCAL_LENGTH) / pixel_distance
+
+        # Visualize key points (optional)
+        cv2.line(frame, (0, y1), (iw, y1), (0, 255, 0), 1)
+        cv2.line(frame, (0, y2), (iw, y2), (0, 0, 255), 1)
+        cv2.putText(frame, f"{distance:.2f} cm", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+
+    return distance
+
+
+@app.post("/api/py/check-distance")
+async def check_distance_endpoint(request: Request):
+    try:
+        # Get the frame data from the request
+        data = await request.json()
+        image_data = data['frame'].split(',')[1]  # Remove the data URL prefix
+        
+        # Decode base64 image
+        nparr = np.frombuffer(base64.b64decode(image_data), np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        # Check distance
+        distance_cm = check_distance(frame)
+        
+        response_data = {
+            "distance_cm": distance_cm
+        }
+        
+        print(f"Distance: {distance_cm:.2f} cm")
+        return response_data
+        
+    except Exception as e:
+        print(f"Error processing frame for distance check: {str(e)}")
+        return {"error": str(e), "status": "error"}
 
 @app.get("/api/py/helloFastApi")
 def hello_fast_api():

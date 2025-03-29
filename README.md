@@ -10,8 +10,10 @@
 <br/>
 
 ## How to run
-Backend: uvicorn api.index:app --reload --port 3001
-Frontend: npm run dev
+### Backend: 
+uvicorn api.index:app --reload --port 3001
+### Frontend: 
+npm run dev
 
 ## Introduction
 

@@ -39,7 +39,7 @@ export default function Home() {
         </div>
       </header>
 
-      <div className="min-h-screen bg-[#111E3B] flex flex-col justify-center px-24 pt-26">
+      <div className="min-h-screen bg-[#111E3B] flex flex-col md:flex-row justify-center items-center px-24 pt-26">
         <div className="max-w-3xl">
           <h1 className="text-7xl font-Raleway font-[400] text-white font-bold mb-8 leading-tight">
             Healthier vision starts here.
@@ -59,8 +59,10 @@ export default function Home() {
               </button>
             </Link>
           </div>
-
         </div>
+        {/* <div className="hidden md:flex justify-center items-center ml-12">
+          <img src="/coolSVG.png" alt="Eye health illustration" className="max-w-md" />
+        </div> */}
       </div>
     </>
   );
