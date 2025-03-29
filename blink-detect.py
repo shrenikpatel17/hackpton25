@@ -36,6 +36,7 @@ def eye_aspect_ratio(eye_landmarks):
     return ear
 
 def detect_blinks():
+    blink_timestamps = []
     # Define constants
     EYE_AR_THRESH = 3.0  # EAR threshold for blink detection (may need adjustment for MediaPipe)
     EYE_AR_CONSEC_FRAMES = 1  # Number of consecutive frames for blink
@@ -58,6 +59,7 @@ def detect_blinks():
     print("Blink detection activated. Press 'q' to quit.")
     
     while True:
+        
         # Read frame
         ret, frame = cap.read()
         if not ret:
@@ -122,6 +124,10 @@ def detect_blinks():
                 # Check if EAR is below the blink threshold
                 if ear > EYE_AR_THRESH:
                     COUNTER += 1
+                    blink_timestamp = time.time()
+                    print(blink_timestamp)
+                    # Add blink timestamp to array
+                    blink_timestamps.append(blink_timestamp)
                 else:
                     # If the eyes were closed for a sufficient number of frames,
                     # increment the total number of blinks
@@ -152,6 +158,12 @@ def detect_blinks():
     # Release the webcam and close windows
     cap.release()
     cv2.destroyAllWindows()
+    
+    # Print the entire blink_timestamps array
+    print("\nBlink Timestamps Array:")
+    print(blink_timestamps)
+    
+    return blink_timestamps
 
 if __name__ == "__main__":
     detect_blinks()
