@@ -57,8 +57,18 @@ firebase_admin.initialize_app(cred)
 fcm_tokens: Dict[str, str] = {}
 
 # Variables for look away notification debouncing
-LOOKAWAY_NOTIFICATION_COOLDOWN = 30  # Seconds between notifications
+LOOKAWAY_NOTIFICATION_COOLDOWN = 10  # Seconds between notifications
 last_lookaway_notification_time = 0
+
+# Variables for notification debouncing
+DISTANCE_NOTIFICATION_COOLDOWN = 30  # Seconds between notifications
+last_distance_notification_time = 0
+BLINK_NOTIFICATION_COOLDOWN = 10  # Seconds between blink notifications
+last_blink_notification_time = 0
+last_blink_time = time.time()  # Track the last time user blinked
+AMBIENT_NOTIFICATION_COOLDOWN = 30  # Seconds between ambient light notifications
+last_ambient_notification_time = 0
+dark_environment_start_time = None  # Track when dark environment started
 
 # Function to send look away notification
 def send_lookaway_notification():
@@ -86,13 +96,6 @@ def send_lookaway_notification():
                 print(f"Failed to send look away notification to token {token[:10]}...: {str(e)}")
     except Exception as e:
         print(f"Error sending look away notification: {str(e)}")
-
-# Variables for notification debouncing
-DISTANCE_NOTIFICATION_COOLDOWN = 30  # Seconds between notifications
-last_distance_notification_time = 0
-BLINK_NOTIFICATION_COOLDOWN = 10  # Seconds between blink notifications
-last_blink_notification_time = 0
-last_blink_time = time.time()  # Track the last time user blinked
 
 # Function to send distance warning notification
 def send_distance_warning_notification():
@@ -147,6 +150,33 @@ def send_blink_reminder_notification():
                 print(f"Failed to send blink reminder notification to token {token[:10]}...: {str(e)}")
     except Exception as e:
         print(f"Error sending blink reminder notification: {str(e)}")
+
+# Function to send ambient light warning notification
+def send_ambient_light_warning_notification():
+    global last_ambient_notification_time
+    current_time = time.time()
+    
+    # Check if enough time has passed since the last notification
+    if current_time - last_ambient_notification_time < AMBIENT_NOTIFICATION_COOLDOWN:
+        return
+    
+    try:
+        for token in fcm_tokens.values():
+            message = messaging.Message(
+                notification=messaging.Notification(
+                    title="Lighting Warning",
+                    body="The environment is too dark! Please move to a brighter area or adjust your screen brightness."
+                ),
+                token=token
+            )
+            try:
+                messaging.send(message)
+                print(f"Ambient light warning notification sent successfully to token: {token[:10]}...")
+                last_ambient_notification_time = current_time  # Update last notification time
+            except Exception as e:
+                print(f"Failed to send ambient light warning notification to token {token[:10]}...: {str(e)}")
+    except Exception as e:
+        print(f"Error sending ambient light warning notification: {str(e)}")
 
 # Background notification task
 async def send_notifications():
@@ -312,7 +342,7 @@ def detect_eye_direction(frame):
         last_change_time = current_time  # Update the last change time
 
         # Send notification when user looks away from the screen
-        if current_direction in ["left", "right"]:
+        if current_direction == "center":
             send_lookaway_notification()
     return current_direction
 
@@ -485,7 +515,7 @@ async def detect_blink_endpoint(request: Request):
 
 @app.post("/api/py/detect-ambient-light")
 async def detect_ambient_light_endpoint(request: Request):
-    global last_known_state, state_changes, last_change_time
+    global last_known_state, state_changes, last_change_time, dark_environment_start_time
 
     try:
         # Get the frame data from the request
@@ -501,17 +531,27 @@ async def detect_ambient_light_endpoint(request: Request):
         
         # Determine the current state based on brightness
         current_state = "bright" if brightness >= 70 else "dark"
+        current_time = time.time()
+        
+        # Track time spent in dark environment
+        if current_state == "dark":
+            if dark_environment_start_time is None:
+                dark_environment_start_time = current_time
+            elif current_time - dark_environment_start_time > 5:  # If in dark for more than 5 seconds
+                send_ambient_light_warning_notification()
+        else:  # Reset dark environment timer when it's bright
+            dark_environment_start_time = None
         
         # Check if the state has changed
         if last_known_state is None:
             # Initialize the last known state
             last_known_state = current_state
-            amb_light_data["timestamp"] = time.time()  # Store initial timestamp
+            amb_light_data["timestamp"] = current_time  # Store initial timestamp
             state_changes.append(amb_light_data.copy())  # Store initial state
         elif current_state != last_known_state:
             # State has changed, update the timestamp and state
             amb_light_data["ambient_light"] = current_state
-            amb_light_data["timestamp"] = time.time()
+            amb_light_data["timestamp"] = current_time
             last_known_state = current_state  # Update the last known state
             state_changes.append(amb_light_data.copy())  # Store state change
         
