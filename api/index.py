@@ -279,14 +279,14 @@ def check_distance(frame):
     Calculate the distance between user and screen using facial landmarks.
     Returns distance in centimeters
     """
-    # 定义关键点索引（MediaPipe面部网格编号）
-    FOREHEAD_TOP = 10    # 额头顶部关键点
-    NOSE_TIP = 4         # 鼻尖关键点
-    REAL_VERTICAL_DISTANCE = 8.0  # 实际额头到鼻尖的垂直距离（单位：厘米，需用户测量）
-    FOCAL_LENGTH = 700            # 示例值，需重新标定！
+    # Define key point indices (MediaPipe face mesh indices)
+    FOREHEAD_TOP = 10    # Forehead top key point
+    NOSE_TIP = 4         # Nose tip key point
+    REAL_VERTICAL_DISTANCE = 8.0  # Actual vertical distance from forehead to nose tip (in centimeters, needs user measurement)
+    FOCAL_LENGTH = 700            # Example value, needs recalibration!
 
     print("Running check_distance")
-    # 转换图像格式并检测面部关键点
+    # Convert image format and detect facial key points
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     results = face_mesh.process(rgb_frame)
 
@@ -295,21 +295,21 @@ def check_distance(frame):
     if results.multi_face_landmarks:
         face_landmarks = results.multi_face_landmarks[0]
 
-        # 获取关键点坐标
+        # Get key point coordinates
         forehead = face_landmarks.landmark[FOREHEAD_TOP]
         nose_tip = face_landmarks.landmark[NOSE_TIP]
 
-        # 计算垂直像素距离（额头到鼻尖）
+        # Calculate vertical pixel distance (forehead to nose tip)
         ih, iw, _ = frame.shape
-        y1 = int(forehead.y * ih)  # 额头Y坐标
-        y2 = int(nose_tip.y * ih)   # 鼻尖Y坐标
+        y1 = int(forehead.y * ih)  # Forehead Y coordinate
+        y2 = int(nose_tip.y * ih)   # Nose tip Y coordinate
         pixel_distance = abs(y2 - y1)
 
-        # 计算实际距离
+        # Calculate actual distance
         if pixel_distance > 0:
             distance = (REAL_VERTICAL_DISTANCE * FOCAL_LENGTH) / pixel_distance
 
-        # 可视化关键点（可选）
+        # Visualize key points (optional)
         cv2.line(frame, (0, y1), (iw, y1), (0, 255, 0), 1)
         cv2.line(frame, (0, y2), (iw, y2), (0, 0, 255), 1)
         cv2.putText(frame, f"{distance:.2f} cm", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
