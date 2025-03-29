@@ -12,9 +12,22 @@ from firebase_admin import credentials, messaging
 import asyncio
 import os
 from typing import Dict
+from contextlib import asynccontextmanager
 
 ### Create FastAPI instance with custom docs and openapi url
-app = FastAPI(docs_url="/api/py/docs", openapi_url="/api/py/openapi.json")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    asyncio.create_task(send_notifications())
+    yield
+    # Shutdown
+    pass
+
+app = FastAPI(
+    docs_url="/api/py/docs", 
+    openapi_url="/api/py/openapi.json",
+    lifespan=lifespan
+)
 
 print("Starting FastAPI server...")
 
@@ -39,8 +52,11 @@ fcm_tokens: Dict[str, str] = {}
 
 # Background notification task
 async def send_notifications():
+    print("Starting notification service...")
     while True:
         try:
+            # Create a list to store coroutines
+            tasks = []
             for token in fcm_tokens.values():
                 message = messaging.Message(
                     notification=messaging.Notification(
@@ -49,15 +65,18 @@ async def send_notifications():
                     ),
                     token=token
                 )
-                messaging.send(message)
-            await asyncio.sleep(30)  # Wait for 30 seconds
+                try:
+                    # Send message synchronously since firebase-admin doesn't support async
+                    messaging.send(message)
+                    print(f"Notification sent successfully to token: {token[:10]}...")
+                except Exception as e:
+                    print(f"Failed to send notification to token {token[:10]}...: {str(e)}")
+            
+            # Wait for 10 seconds before sending next batch
+            await asyncio.sleep(10)
         except Exception as e:
-            print(f"Error sending notification: {str(e)}")
-            await asyncio.sleep(30)  # Still wait even if there's an error
-
-@app.on_event("startup")
-async def startup_event():
-    asyncio.create_task(send_notifications())
+            print(f"Error in notification service: {str(e)}")
+            await asyncio.sleep(1)  # Wait briefly before retrying
 
 @app.post("/api/py/register-fcm-token")
 async def register_fcm_token(request: Request):

@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { initializeApp } from 'firebase/app';
+import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 
 interface UserData {
   firstName: string;
@@ -22,6 +24,86 @@ export default function DashboardPage() {
   const router = useRouter();
 
   useEffect(() => {
+    // Initialize Firebase
+    const firebaseConfig = {
+      apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+      authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+      projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+      storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+      messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+      appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const messaging = getMessaging(app);
+
+    // Modify the onMessage handler
+    const setupMessageListener = (messaging: any) => {
+      console.log('Setting up message listener');
+      return onMessage(messaging, (payload) => {
+        console.log('Received foreground message:', payload);
+        // Create and show notification manually for foreground messages
+        if (Notification.permission === 'granted') {
+          new Notification(payload.notification?.title || 'Default Title', {
+            body: payload.notification?.body || 'Default Body',
+            icon: '/eyeLogo.png'
+          });
+        }
+      });
+    };
+
+    // Update the initializePushNotifications function
+    async function initializePushNotifications() {
+        console.log("Initializing push notifications");
+        try {
+            if (!('Notification' in window)) {
+                console.log('This browser does not support notifications');
+                return;
+            }
+
+            const permission = await Notification.requestPermission();
+            if (permission === 'granted') {
+                console.log('Getting FCM token...');
+                const token = await getToken(messaging, {
+                    vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY
+                });
+
+                if (!token) {
+                    console.error('No registration token available');
+                    return;
+                }
+
+                console.log('FCM Token:', token);
+                
+                // Register token with backend
+                const response = await fetch('/api/py/register-fcm-token', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        userId: user?.email || 'default',
+                        token: token
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to register FCM token with backend');
+                }
+                
+                console.log('Successfully registered FCM token with backend');
+
+                // Set up message listener
+                setupMessageListener(messaging);
+            } else {
+                console.log('Notification permission denied.');
+            }
+        } catch (error) {
+            console.error('Error initializing push notifications:', error);
+        }
+    }
+
+    // Fetch user data
     async function fetchUserData() {
       try {
         const response = await fetch('/api/auth/user');
@@ -34,6 +116,8 @@ export default function DashboardPage() {
         }
         const data = await response.json();
         setUser(data);
+        // Initialize push notifications after user data is loaded
+        await initializePushNotifications();
       } catch (err: any) {
         setError(err.message);
       } finally {
