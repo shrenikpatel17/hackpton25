@@ -1,5 +1,5 @@
 import "./globals.css";
-import { Inter } from "next/font/google";
+import { Inter, Raleway } from "next/font/google";
 import { Press_Start_2P } from "next/font/google";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -7,6 +7,10 @@ const pressStart2P = Press_Start_2P({
   weight: "400",
   subsets: ["latin"],
   display: "swap",
+});
+
+const raleway = Raleway({
+  subsets: ['latin'],
 });
 
 export const metadata = {
@@ -21,7 +25,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>{children}</body>
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com/css2?family=Raleway:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet" />
+      </head>
+      <body className={`${inter.className} ${raleway.className}`}>{children}</body>
     </html>
   );
 }

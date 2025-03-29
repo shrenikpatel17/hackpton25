@@ -159,86 +159,68 @@ export default function WebcamPage() {
   }, []);
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-purple-900 to-indigo-900 flex flex-col items-center justify-center p-8">
-      <div className="text-center mb-8">
-        <h1 className="text-4xl font-bold mb-4" 
-            style={{
-              color: '#ff61e6',
-              textShadow: '0 0 10px #ff61e6, 0 0 20px #ff61e6',
-              fontFamily: "'Press Start 2P', cursive"
-            }}>
-          Eye Health Monitor
-        </h1>
-        <div className="text-white text-xl mb-4">
-          Looking: <span className="font-bold text-[#00ff88]">{eyeDirection}</span>
+    <>
+      <header className="fixed top-4 left-24 right-24 rounded-3xl bg-white/10 backdrop-blur-md z-50">
+        <div className="max-w-full mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-8">
+              <Link href="/" className="text-white font-bold text-xl flex items-center">
+                <img src="/eyeLogo.png" alt="Logo" className="w-9 h-9 mr-1" />
+                optiq
+              </Link>
+            </div>
+            <Link href="/">
+              <button className="px-4 py-2 bg-white text-black rounded-lg font-medium hover:bg-gray-100 transition-colors">
+                Back to Home
+              </button>
+            </Link>
+          </div>
         </div>
-        <div className="text-white text-xl mb-4">
-          Status: <span 
-            className={`font-bold ${isBlinking ? 'text-yellow-300' : 'text-[#00ff88]'}`}
-            style={{
-              textShadow: isBlinking ? '0 0 10px #ffd700' : '0 0 10px #00ff88'
-            }}>
-            {isBlinking ? 'BLINKING' : 'Eyes Open'}
-          </span>
-        </div>
-        <div className="text-white text-xl mb-4">
-          Ambient Light: <span 
-            className={`font-bold ${ambientLight === "dark" ? 'text-yellow-300' : 'text-[#00ff88]'}`}
-            style={{
-              textShadow: ambientLight === "dark" ? '0 0 10px #ffd700' : '0 0 10px #00ff88'
-            }}>
-            {ambientLight.toUpperCase()}
-          </span>
-        </div>
-      </div>
+      </header>
 
-      <div className="relative mb-8"
-           style={{
-             border: '4px solid #00ff88',
-             boxShadow: '0 0 20px #00ff88',
-             borderRadius: '10px',
-             overflow: 'hidden'
-           }}>
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          className="w-[640px] h-[480px] bg-black"
-        />
-        <canvas
-          ref={canvasRef}
-          className="hidden"  // Hide the canvas element as it's only used for frame capture
-        />
-      </div>
+      <div className="min-h-screen bg-[#111E3B] flex flex-col items-center justify-center px-24 pt-32">
+        <div className="text-center mb-12">
+          <div className="grid grid-cols-3 gap-8 mb-2">
+            <div className="text-gray-300">
+              Looking: <span className="text-white font-medium">{eyeDirection}</span>
+            </div>
+            <div className="text-gray-300">
+              Status: <span className="text-white font-medium">
+                {isBlinking ? 'BLINKING' : 'Eyes Open'}
+              </span>
+            </div>
+            <div className="text-gray-300">
+              Ambient Light: <span className="text-white font-medium">
+                {ambientLight.toUpperCase()}
+              </span>
+            </div>
+          </div>
+        </div>
 
-      <div className="flex gap-6">
+        <div className="relative mb-8 rounded-2xl overflow-hidden border-2 border-white/20">
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            className="w-[640px] h-[480px] bg-black"
+          />
+          <canvas
+            ref={canvasRef}
+            className="hidden"
+          />
+        </div>
+
         <button
           onClick={isStreaming ? stopWebcam : startWebcam}
-          className="px-8 py-4 text-xl font-bold rounded-lg transition-all duration-300 ease-in-out"
-          style={{
-            background: isStreaming ? 'linear-gradient(45deg, #ff4444, #ff6666)' : 'linear-gradient(45deg, #00ff88, #00ffcc)',
-            boxShadow: isStreaming ? '0 0 15px #ff4444' : '0 0 15px #00ff88',
-            color: '#1a1a1a',
-            border: isStreaming ? '3px solid #ff4444' : '3px solid #00ff88',
-          }}
+          className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+            isStreaming 
+            ? 'bg-red-500 text-white hover:bg-red-600' 
+            : 'bg-white text-black hover:bg-gray-100'
+          }`}
         >
           {isStreaming ? 'Stop Camera' : 'Start Camera'}
         </button>
-
-        <Link href="/">
-          <button
-            className="px-8 py-4 text-xl font-bold rounded-lg transition-all duration-300 ease-in-out"
-            style={{
-              background: 'linear-gradient(45deg, #ff61e6, #ff8ae2)',
-              boxShadow: '0 0 15px #ff61e6',
-              color: '#1a1a1a',
-              border: '3px solid #ff61e6',
-            }}
-          >
-            Back to Home
-          </button>
-        </Link>
       </div>
-    </main>
+    </>
   );
 } 
