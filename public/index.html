@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Posture Reminder</title>
+</head>
+<body>
+    <h1>Posture Reminder</h1>
+    <p>You will receive notifications every 30 seconds to remind you to lean back.</p>
+
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-messaging-compat.js"></script>
+    
+    <script>
+        // Initialize Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyB8InWRrVM7Uv49EYngnAVaMuHSUmkVrbA",
+            authDomain: "hackpton25.firebaseapp.com",
+            projectId: "hackpton25",
+            storageBucket: "hackpton25.firebasestorage.app",
+            messagingSenderId: "209594220719",
+            appId: "1:209594220719:web:caeade2bfa71e480c7945a",
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const messaging = firebase.messaging();
+
+        // Request permission and get FCM token
+        async function initializePushNotifications() {
+            try {
+                const permission = await Notification.requestPermission();
+                if (permission === 'granted') {
+                    const token = await messaging.getToken({
+                        vapidKey: 'YOUR_VAPID_KEY'
+                    });
+                    
+                    // Register token with backend
+                    await fetch('/api/py/register-fcm-token', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            userId: 'default',
+                            token: token
+                        })
+                    });
+                    
+                    console.log('Notification permission granted.');
+                } else {
+                    console.log('Notification permission denied.');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+
+        // Initialize when page loads
+        window.addEventListener('load', initializePushNotifications);
+    </script>
+</body>
+</html> 
