@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 import cv2
 import numpy as np
@@ -6,11 +6,61 @@ import mediapipe as mp
 import base64
 import json
 from fastapi import HTTPException
+import firebase_admin
+from firebase_admin import credentials, messaging
+import asyncio
+import os
+from typing import Dict
 
 ### Create FastAPI instance with custom docs and openapi url
 app = FastAPI(docs_url="/api/py/docs", openapi_url="/api/py/openapi.json")
 
 print("Starting FastAPI server...")
+
+# Initialize Firebase Admin SDK
+cred = credentials.Certificate("firebase-credentials.json")
+firebase_admin.initialize_app(cred)
+
+# Store FCM tokens
+fcm_tokens: Dict[str, str] = {}
+
+# Background notification task
+async def send_notifications():
+    while True:
+        try:
+            for token in fcm_tokens.values():
+                message = messaging.Message(
+                    notification=messaging.Notification(
+                        title="Posture Check",
+                        body="Remember to lean back and maintain good posture!"
+                    ),
+                    token=token
+                )
+                messaging.send(message)
+            await asyncio.sleep(30)  # Wait for 30 seconds
+        except Exception as e:
+            print(f"Error sending notification: {str(e)}")
+            await asyncio.sleep(30)  # Still wait even if there's an error
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(send_notifications())
+
+@app.post("/api/py/register-fcm-token")
+async def register_fcm_token(request: Request):
+    try:
+        data = await request.json()
+        user_id = data.get("userId", "default")
+        token = data.get("token")
+        
+        if not token:
+            raise HTTPException(status_code=400, detail="FCM token is required")
+        
+        fcm_tokens[user_id] = token
+        return {"message": "FCM token registered successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
