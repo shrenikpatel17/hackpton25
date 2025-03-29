@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 
 export interface ISession extends mongoose.Document {
-  userId: mongoose.Types.ObjectId;  // 关联到用户
+  userId: mongoose.Types.ObjectId;
   date: Date;
   timeStart: Date;
   timeEnd: Date;
