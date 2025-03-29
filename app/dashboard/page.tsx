@@ -116,6 +116,7 @@ export default function DashboardPage() {
         }
         const data = await response.json();
         setUser(data);
+
         // Initialize push notifications after user data is loaded
         await initializePushNotifications();
       } catch (err: any) {

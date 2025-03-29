@@ -43,6 +43,12 @@ direction_changes = []  # List to store direction changes
 last_known_direction = None  # Initialize the last known direction
 
 
+# Initialize global variables for distance tracking
+distance_changes = []  # List to store distance changes
+last_known_distance_state = None  # Initialize the last known distance state
+state_start_time = time.time()  # Track the start time of the current state
+
+
 # Initialize Firebase Admin SDK
 cred = credentials.Certificate("firebase-credentials.json")
 firebase_admin.initialize_app(cred)
@@ -235,6 +241,7 @@ def process_ambient_light(frame):
 
 
 def detect_blink(face_landmarks, img_w, img_h):
+    global blink_timestamps, blink_counter
     """
     Detect if the person is blinking by calculating the eye aspect ratio (EAR)
     Returns: Object with blinks and blink_timestamps
@@ -295,6 +302,7 @@ def detect_blink(face_landmarks, img_w, img_h):
 
 @app.post("/api/py/detect-eye-direction")
 async def detect_direction(request: Request):
+    global direction_changes, last_known_direction, last_change_time
 
     try:
         # Get the frame data from the request
@@ -339,6 +347,7 @@ async def detect_direction(request: Request):
 
 @app.post("/api/py/detect-blink")
 async def detect_blink_endpoint(request: Request):
+    global blink_timestamps, blink_counter
     try:
         # Get the frame data from the request
         data = await request.json()
@@ -378,6 +387,7 @@ async def detect_blink_endpoint(request: Request):
 
 @app.post("/api/py/detect-ambient-light")
 async def detect_ambient_light_endpoint(request: Request):
+    global last_known_state, state_changes, last_change_time
 
     try:
         # Get the frame data from the request
@@ -420,6 +430,8 @@ async def detect_ambient_light_endpoint(request: Request):
         return {"error": str(e), "status": "error"}
 
 def check_distance(frame):
+    global last_known_distance_state, distance_changes, state_start_time
+
     """
     Calculate the distance between user and screen using facial landmarks.
     Returns distance in centimeters
@@ -454,6 +466,32 @@ def check_distance(frame):
         if pixel_distance > 0:
             distance = (REAL_VERTICAL_DISTANCE * FOCAL_LENGTH) / pixel_distance
 
+        # Determine the current distance state
+        if distance < 50:
+            current_distance_state = "close"
+        elif 50 <= distance <= 100:
+            current_distance_state = "med"
+        else:
+            current_distance_state = "far"
+
+        # Check if the distance state has changed
+        current_time = time.time()
+        if last_known_distance_state is None:
+            # Initialize the last known distance state
+            last_known_distance_state = current_distance_state
+            state_start_time = current_time  # Initialize the start time
+        elif current_distance_state != last_known_distance_state:
+            # State has changed, log the time spent in the previous state
+
+            distance_changes.append({
+                "distance": last_known_distance_state,
+                "start_time": state_start_time,
+                "end_time": current_time,
+            })
+            # Update the last known state and start time
+            last_known_distance_state = current_distance_state
+            state_start_time = current_time
+
         # Visualize key points (optional)
         cv2.line(frame, (0, y1), (iw, y1), (0, 255, 0), 1)
         cv2.line(frame, (0, y2), (iw, y2), (0, 0, 255), 1)
@@ -464,6 +502,8 @@ def check_distance(frame):
 
 @app.post("/api/py/check-distance")
 async def check_distance_endpoint(request: Request):
+    global distance_changes
+
     try:
         # Get the frame data from the request
         data = await request.json()
@@ -477,7 +517,9 @@ async def check_distance_endpoint(request: Request):
         distance_cm = check_distance(frame)
         
         response_data = {
-            "distance_cm": distance_cm
+            "distance_cm": distance_cm,
+            "distance_changes": distance_changes  # Include distance changes in the response
+
         }
         
         print(f"Distance: {distance_cm:.2f} cm")
@@ -490,3 +532,4 @@ async def check_distance_endpoint(request: Request):
 @app.get("/api/py/helloFastApi")
 def hello_fast_api():
     return {"message": "Hello from FastAPI"}
+
