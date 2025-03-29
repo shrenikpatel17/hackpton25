@@ -189,9 +189,9 @@ export default function WebcamPage() {
                 optiq
               </Link>
             </div>
-            <Link href="/">
+            <Link href="/dashboard">
               <button className="px-4 py-2 bg-white text-black rounded-lg font-medium hover:bg-gray-100 transition-colors">
-                Back to Home
+                Dashboard
               </button>
             </Link>
           </div>
