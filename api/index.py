@@ -5,6 +5,7 @@ import numpy as np
 import mediapipe as mp
 import base64
 import json
+from fastapi import HTTPException
 
 ### Create FastAPI instance with custom docs and openapi url
 app = FastAPI(docs_url="/api/py/docs", openapi_url="/api/py/openapi.json")
@@ -106,7 +107,24 @@ def detect_eye_direction(frame):
     else:
         return "center"
 
-import numpy as np
+
+def process_ambient_light(frame):
+    try:
+        print("Processing ambient light")
+        
+        # Convert the BGR image to grayscale
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        
+        # Calculate average brightness
+        brightness = np.mean(gray)
+
+        return float(brightness)
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing image: {str(e)}") 
+    
+
+
 
 def detect_blink(face_landmarks, img_w, img_h):
     """
@@ -226,6 +244,36 @@ async def detect_blink_endpoint(request: Request):
     except Exception as e:
         print(f"Error processing frame for blink: {str(e)}")
         return {"error": str(e), "status": "error"}
+
+
+@app.post("/api/py/detect-ambient-light")
+async def detect_ambient_light_endpoint(request: Request):
+    try:
+         # Get the frame data from the request
+        data = await request.json()
+        image_data = data['frame'].split(',')[1]  # Remove the data URL prefix
+        
+        # Decode base64 image
+        nparr = np.frombuffer(base64.b64decode(image_data), np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        # Calculate ambient light regardless of face detection
+        brightness = process_ambient_light(frame)
+        
+        # Convert brightness to string "dark" or "bright" based on threshold
+        amb_light = "bright" if brightness >= 70 else "dark"
+        
+        response_data = {
+            "amb_light": amb_light
+        }
+                        
+        print(f"Ambient light: {response_data['amb_light']}")
+        return response_data
+        
+    except Exception as e:
+        print(f"Error processing frame for ambient light: {str(e)}")
+        return {"error": str(e), "status": "error"}
+
 
 @app.get("/api/py/helloFastApi")
 def hello_fast_api():
