@@ -40,4 +40,10 @@ next-env.d.ts
 # python
 __pycache__/
 venv
+# local env files
+.env*.local
+.env
+.firebase-credentials.json
+firebase-credentials.json
+package-lock.json
 myenv/
