@@ -260,8 +260,11 @@ async def detect_ambient_light_endpoint(request: Request):
         # Calculate ambient light regardless of face detection
         brightness = process_ambient_light(frame)
         
+        # Convert brightness to string "dark" or "bright" based on threshold
+        amb_light = "bright" if brightness >= 70 else "dark"
+        
         response_data = {
-            "amb_light": brightness
+            "amb_light": amb_light
         }
                         
         print(f"Ambient light: {response_data['amb_light']}")

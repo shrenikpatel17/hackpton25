@@ -12,7 +12,7 @@ export default function WebcamPage() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [eyeDirection, setEyeDirection] = useState<string>("unknown");
   const [isBlinking, setIsBlinking] = useState(false);
-  const [ambientLight, setAmbientLight] = useState<number>(0);
+  const [ambientLight, setAmbientLight] = useState<string>("unknown");
 
   const startWebcam = async () => {
     try {
@@ -97,7 +97,7 @@ export default function WebcamPage() {
       } else if (endpoint === '/api/py/detect-blink') {
         setIsBlinking(data.is_blinking || false);
       } else if (endpoint === '/api/py/detect-ambient-light') {
-        setAmbientLight(data.amb_light || 0);
+        setAmbientLight(data.amb_light || "unknown");
       }
     } catch (error) {
       console.error('Error sending frame to API:', error);
@@ -183,11 +183,11 @@ export default function WebcamPage() {
         </div>
         <div className="text-white text-xl mb-4">
           Ambient Light: <span 
-            className={`font-bold ${ambientLight < 100 ? 'text-yellow-300' : 'text-[#00ff88]'}`}
+            className={`font-bold ${ambientLight === "dark" ? 'text-yellow-300' : 'text-[#00ff88]'}`}
             style={{
-              textShadow: ambientLight < 100 ? '0 0 10px #ffd700' : '0 0 10px #00ff88'
+              textShadow: ambientLight === "dark" ? '0 0 10px #ffd700' : '0 0 10px #00ff88'
             }}>
-            {Math.round(ambientLight)} lux
+            {ambientLight.toUpperCase()}
           </span>
         </div>
       </div>
