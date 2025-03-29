@@ -59,6 +59,9 @@ fcm_tokens: Dict[str, str] = {}
 # Variables for notification debouncing
 DISTANCE_NOTIFICATION_COOLDOWN = 30  # Seconds between notifications
 last_distance_notification_time = 0
+BLINK_NOTIFICATION_COOLDOWN = 10  # Seconds between blink notifications
+last_blink_notification_time = 0
+last_blink_time = time.time()  # Track the last time user blinked
 
 # Function to send distance warning notification
 def send_distance_warning_notification():
@@ -86,6 +89,33 @@ def send_distance_warning_notification():
                 print(f"Failed to send distance warning notification to token {token[:10]}...: {str(e)}")
     except Exception as e:
         print(f"Error sending distance warning notification: {str(e)}")
+
+# Function to send blink reminder notification
+def send_blink_reminder_notification():
+    global last_blink_notification_time
+    current_time = time.time()
+    
+    # Check if enough time has passed since the last notification
+    if current_time - last_blink_notification_time < BLINK_NOTIFICATION_COOLDOWN:
+        return
+    
+    try:
+        for token in fcm_tokens.values():
+            message = messaging.Message(
+                notification=messaging.Notification(
+                    title="Blink Reminder",
+                    body="Remember to blink! Your eyes need moisture to stay healthy."
+                ),
+                token=token
+            )
+            try:
+                messaging.send(message)
+                print(f"Blink reminder notification sent successfully to token: {token[:10]}...")
+                last_blink_notification_time = current_time  # Update last notification time
+            except Exception as e:
+                print(f"Failed to send blink reminder notification to token {token[:10]}...: {str(e)}")
+    except Exception as e:
+        print(f"Error sending blink reminder notification: {str(e)}")
 
 # Background notification task
 async def send_notifications():
@@ -272,7 +302,7 @@ def process_ambient_light(frame):
 
 
 def detect_blink(face_landmarks, img_w, img_h):
-    global blink_timestamps, blink_counter
+    global blink_timestamps, blink_counter, last_blink_time
     """
     Detect if the person is blinking by calculating the eye aspect ratio (EAR)
     Returns: Object with blinks and blink_timestamps
@@ -308,24 +338,27 @@ def detect_blink(face_landmarks, img_w, img_h):
     # Average EAR of both eyes
     avg_ear = (left_ear + right_ear) / 2.0
 
-    #print(f"Left EAR: {left_ear:.3f}, Right EAR: {right_ear:.3f}, Avg EAR: {avg_ear:.3f}")
-    
-    # Dynamic threshold adjustment based on current average EAR (could be optimized with training)
-    EAR_THRESHOLD = 0.25  # Threshold decreases when the person is blinking more
-    #print(f"Adjusted EAR Threshold: {EAR_THRESHOLD:.3f}")
+    # Dynamic threshold adjustment based on current average EAR
+    EAR_THRESHOLD = 0.25
     
     # Convert numpy.bool_ to Python bool before returning
-    is_blinking = bool(avg_ear < EAR_THRESHOLD)  # Convert to Python bool
+    is_blinking = bool(avg_ear < EAR_THRESHOLD)
 
+    current_time = time.time()
+    
     if is_blinking:
         # Only append timestamp if this is the start of a new blink
-        current_time = time.time()
-        # Only append if enough time has passed since last blink (0.5s threshold)
+        # Only append if enough time has passed since last blink (0.25s threshold)
         if not blink_timestamps or current_time - blink_timestamps[-1] >= 0.25:
             blink_counter += 1
-            blink_timestamps.append(time.time())
+            blink_timestamps.append(current_time)
+            last_blink_time = current_time  # Update last blink time
             print(f"Blink detected! EAR: {avg_ear:.3f}")
-    print(blink_counter)
+    else:
+        # Check if it's been more than 5 seconds since the last blink
+        if current_time - last_blink_time > 5:
+            send_blink_reminder_notification()
+    
     return {
         "is_blinking": is_blinking,
         "blink_timestamps": blink_timestamps
