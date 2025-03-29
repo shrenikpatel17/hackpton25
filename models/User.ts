@@ -6,7 +6,7 @@ export interface IUser extends mongoose.Document {
   password: string;
   firstName: string;
   lastName: string;
-  sessionIds: mongoose.Types.ObjectId[];  // 只存储 session IDs
+  sessions: mongoose.Types.ObjectId[];
   blinkRate: number;
   lookAwayRate: number;
   moveBackRate: number;

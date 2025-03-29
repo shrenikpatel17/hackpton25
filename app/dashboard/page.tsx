@@ -129,7 +129,7 @@ export default function DashboardPage() {
         setUser(data);
 
         // Fetch sessions data if user has sessions
-        if (data.sessionIds && data.sessionIds.length > 0) {
+        if (data.sessions && data.sessions.length > 0) {
           const sessionsResponse = await fetch('/api/sessions');
           if (sessionsResponse.ok) {
             const sessionsData = await sessionsResponse.json();
