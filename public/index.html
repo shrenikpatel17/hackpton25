@@ -8,56 +8,5 @@
 <body>
     <h1>Posture Reminder</h1>
     <p>You will receive notifications every 30 seconds to remind you to lean back.</p>
-
-    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-messaging-compat.js"></script>
-    
-    <script>
-        // Initialize Firebase
-        const firebaseConfig = {
-            apiKey: process.env.FIREBASE_API_KEY,
-            authDomain: process.env.FIREBASE_AUTH_DOMAIN,
-            projectId: process.env.FIREBASE_PROJECT_ID,
-            storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
-            messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID,
-            appId: process.env.FIREBASE_APP_ID,
-        };
-
-        firebase.initializeApp(firebaseConfig);
-        const messaging = firebase.messaging();
-
-        // Request permission and get FCM token
-        async function initializePushNotifications() {
-            try {
-                const permission = await Notification.requestPermission();
-                if (permission === 'granted') {
-                    const token = await messaging.getToken({
-                        vapidKey: 'YOUR_VAPID_KEY'
-                    });
-                    
-                    // Register token with backend
-                    await fetch('/api/py/register-fcm-token', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            userId: 'default',
-                            token: token
-                        })
-                    });
-                    
-                    console.log('Notification permission granted.');
-                } else {
-                    console.log('Notification permission denied.');
-                }
-            } catch (error) {
-                console.error('Error:', error);
-            }
-        }
-
-        // Initialize when page loads
-        window.addEventListener('load', initializePushNotifications);
-    </script>
 </body>
 </html> 
