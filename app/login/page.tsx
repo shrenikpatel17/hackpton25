@@ -33,7 +33,7 @@ export default function LoginPage() {
       console.log(res);
       
       // Wait for the navigation to complete
-      await router.push('/webcam');
+      await router.push('/dashboard');
     } catch (err: any) {
       setError(err.message);
     } finally {
