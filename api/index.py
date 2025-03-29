@@ -167,9 +167,9 @@ def process_ambient_light(frame):
 def detect_blink(face_landmarks, img_w, img_h):
     """
     Detect if the person is blinking by calculating the eye aspect ratio (EAR)
-    Returns: (bool, list) - A tuple containing blink status and updated timestamps
+    Returns: Object with blinks and blink_timestamps
     """
-    global blink_counter
+
     # Indices for the eye landmarks (vertical and horizontal points)
     LEFT_EYE = [362, 385, 387, 373, 380, 374]
     RIGHT_EYE = [33, 160, 158, 133, 153, 144]
@@ -225,7 +225,7 @@ def detect_blink(face_landmarks, img_w, img_h):
 
 @app.post("/api/py/detect-eye-direction")
 async def detect_direction(request: Request):
-    global last_known_direction, direction_changes
+
     try:
         # Get the frame data from the request
         data = await request.json()
@@ -308,7 +308,7 @@ async def detect_blink_endpoint(request: Request):
 
 @app.post("/api/py/detect-ambient-light")
 async def detect_ambient_light_endpoint(request: Request):
-    global last_known_state, state_changes
+
     try:
         # Get the frame data from the request
         data = await request.json()
