@@ -4,7 +4,7 @@ import { verifyToken } from '@/lib/jwt';
 
 export function middleware(request: NextRequest) {
   // Paths that require authentication
-  const protectedPaths = ['/webcam'];
+  const protectedPaths = ['/test'];
   
   // Check if the current path requires authentication
   const isProtectedPath = protectedPaths.some(path => 
