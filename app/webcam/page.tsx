@@ -8,9 +8,11 @@ export default function WebcamPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const directionIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const blinkIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const ambientLightIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [eyeDirection, setEyeDirection] = useState<string>("unknown");
   const [isBlinking, setIsBlinking] = useState(false);
+  const [ambientLight, setAmbientLight] = useState<number>(0);
 
   const startWebcam = async () => {
     try {
@@ -36,7 +38,7 @@ export default function WebcamPage() {
       videoRef.current.srcObject = null;
       setIsStreaming(false);
     }
-    // Clear both intervals
+    // Clear all intervals
     if (directionIntervalRef.current) {
       clearInterval(directionIntervalRef.current);
       directionIntervalRef.current = null;
@@ -44,6 +46,10 @@ export default function WebcamPage() {
     if (blinkIntervalRef.current) {
       clearInterval(blinkIntervalRef.current);
       blinkIntervalRef.current = null;
+    }
+    if (ambientLightIntervalRef.current) {
+      clearInterval(ambientLightIntervalRef.current);
+      ambientLightIntervalRef.current = null;
     }
   };
 
@@ -90,6 +96,8 @@ export default function WebcamPage() {
         setIsBlinking(data.is_blinking || false);
       } else if (endpoint === '/api/py/detect-blink') {
         setIsBlinking(data.is_blinking || false);
+      } else if (endpoint === '/api/py/detect-ambient-light') {
+        setAmbientLight(data.amb_light || 0);
       }
     } catch (error) {
       console.error('Error sending frame to API:', error);
@@ -109,13 +117,21 @@ export default function WebcamPage() {
         }
       }, 1000);
 
-      // Blink detection interval (100ms)
+      // Blink detection interval (10ms)
       blinkIntervalRef.current = setInterval(() => {
         const frame = captureFrame();
         if (frame) {
           sendFrameToAPI(frame, '/api/py/detect-blink');
         }
       }, 10);
+
+      // Ambient light detection interval (1000ms)
+      ambientLightIntervalRef.current = setInterval(() => {
+        const frame = captureFrame();
+        if (frame) {
+          sendFrameToAPI(frame, '/api/py/detect-ambient-light');
+        }
+      }, 1000);
     }
 
     // Cleanup function
@@ -127,6 +143,10 @@ export default function WebcamPage() {
       if (blinkIntervalRef.current) {
         clearInterval(blinkIntervalRef.current);
         blinkIntervalRef.current = null;
+      }
+      if (ambientLightIntervalRef.current) {
+        clearInterval(ambientLightIntervalRef.current);
+        ambientLightIntervalRef.current = null;
       }
     };
   }, [isStreaming]);
@@ -159,6 +179,15 @@ export default function WebcamPage() {
               textShadow: isBlinking ? '0 0 10px #ffd700' : '0 0 10px #00ff88'
             }}>
             {isBlinking ? 'BLINKING' : 'Eyes Open'}
+          </span>
+        </div>
+        <div className="text-white text-xl mb-4">
+          Ambient Light: <span 
+            className={`font-bold ${ambientLight < 100 ? 'text-yellow-300' : 'text-[#00ff88]'}`}
+            style={{
+              textShadow: ambientLight < 100 ? '0 0 10px #ffd700' : '0 0 10px #00ff88'
+            }}>
+            {Math.round(ambientLight)} lux
           </span>
         </div>
       </div>
