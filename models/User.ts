@@ -4,7 +4,12 @@ import bcrypt from 'bcryptjs';
 export interface IUser extends mongoose.Document {
   email: string;
   password: string;
-  name: string;
+  firstName: string;
+  lastName: string;
+  sessionIds: mongoose.Types.ObjectId[];  // 只存储 session IDs
+  blinkRate: number;
+  lookAwayRate: number;
+  moveBackRate: number;
   comparePassword(candidatePassword: string): Promise<boolean>;
 }
 
@@ -26,10 +31,10 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Please provide a name'],
   },
-  sessions: {
-    type: Array,
-    default: [],
-  },
+  sessions: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Session'
+  }],
   blinkRate: {
     type: Number,
     default: 0,
