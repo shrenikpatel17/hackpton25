@@ -56,6 +56,37 @@ firebase_admin.initialize_app(cred)
 # Store FCM tokens
 fcm_tokens: Dict[str, str] = {}
 
+# Variables for look away notification debouncing
+LOOKAWAY_NOTIFICATION_COOLDOWN = 30  # Seconds between notifications
+last_lookaway_notification_time = 0
+
+# Function to send look away notification
+def send_lookaway_notification():
+    global last_lookaway_notification_time
+    current_time = time.time()
+    
+    # Check if enough time has passed since the last notification
+    if current_time - last_lookaway_notification_time < LOOKAWAY_NOTIFICATION_COOLDOWN:
+        return
+    
+    try:
+        for token in fcm_tokens.values():
+            message = messaging.Message(
+                notification=messaging.Notification(
+                    title="Look Away Reminder",
+                    body="Please take a break and look away from the screen for 20 seconds!"
+                ),
+                token=token
+            )
+            try:
+                messaging.send(message)
+                print(f"Look away notification sent successfully to token: {token[:10]}...")
+                last_lookaway_notification_time = current_time  # Update last notification time
+            except Exception as e:
+                print(f"Failed to send look away notification to token {token[:10]}...: {str(e)}")
+    except Exception as e:
+        print(f"Error sending look away notification: {str(e)}")
+
 # Variables for notification debouncing
 DISTANCE_NOTIFICATION_COOLDOWN = 30  # Seconds between notifications
 last_distance_notification_time = 0
@@ -250,6 +281,9 @@ def detect_eye_direction(frame):
         last_known_direction = current_direction  # Update the last known direction
         last_change_time = current_time  # Update the last change time
 
+        # Send notification when user looks away from the screen
+        if current_direction in ["left", "right"]:
+            send_lookaway_notification()
     return current_direction
 
 
@@ -565,4 +599,3 @@ async def check_distance_endpoint(request: Request):
 @app.get("/api/py/helloFastApi")
 def hello_fast_api():
     return {"message": "Hello from FastAPI"}
-
