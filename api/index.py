@@ -274,6 +274,73 @@ async def detect_ambient_light_endpoint(request: Request):
         print(f"Error processing frame for ambient light: {str(e)}")
         return {"error": str(e), "status": "error"}
 
+def check_distance(frame):
+    """
+    Calculate the distance between user and screen using facial landmarks.
+    Returns distance in centimeters
+    """
+    # Define key point indices (MediaPipe face mesh indices)
+    FOREHEAD_TOP = 10    # Forehead top key point
+    NOSE_TIP = 4         # Nose tip key point
+    REAL_VERTICAL_DISTANCE = 8.0  # Actual vertical distance from forehead to nose tip (in centimeters, needs user measurement)
+    FOCAL_LENGTH = 700            # Example value, needs recalibration!
+
+    print("Running check_distance")
+    # Convert image format and detect facial key points
+    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    results = face_mesh.process(rgb_frame)
+
+    distance = None
+
+    if results.multi_face_landmarks:
+        face_landmarks = results.multi_face_landmarks[0]
+
+        # Get key point coordinates
+        forehead = face_landmarks.landmark[FOREHEAD_TOP]
+        nose_tip = face_landmarks.landmark[NOSE_TIP]
+
+        # Calculate vertical pixel distance (forehead to nose tip)
+        ih, iw, _ = frame.shape
+        y1 = int(forehead.y * ih)  # Forehead Y coordinate
+        y2 = int(nose_tip.y * ih)   # Nose tip Y coordinate
+        pixel_distance = abs(y2 - y1)
+
+        # Calculate actual distance
+        if pixel_distance > 0:
+            distance = (REAL_VERTICAL_DISTANCE * FOCAL_LENGTH) / pixel_distance
+
+        # Visualize key points (optional)
+        cv2.line(frame, (0, y1), (iw, y1), (0, 255, 0), 1)
+        cv2.line(frame, (0, y2), (iw, y2), (0, 0, 255), 1)
+        cv2.putText(frame, f"{distance:.2f} cm", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+
+    return distance
+
+
+@app.post("/api/py/check-distance")
+async def check_distance_endpoint(request: Request):
+    try:
+        # Get the frame data from the request
+        data = await request.json()
+        image_data = data['frame'].split(',')[1]  # Remove the data URL prefix
+        
+        # Decode base64 image
+        nparr = np.frombuffer(base64.b64decode(image_data), np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        # Check distance
+        distance_cm = check_distance(frame)
+        
+        response_data = {
+            "distance_cm": distance_cm
+        }
+        
+        print(f"Distance: {distance_cm:.2f} cm")
+        return response_data
+        
+    except Exception as e:
+        print(f"Error processing frame for distance check: {str(e)}")
+        return {"error": str(e), "status": "error"}
 
 @app.get("/api/py/helloFastApi")
 def hello_fast_api():
