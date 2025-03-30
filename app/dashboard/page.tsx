@@ -83,243 +83,139 @@ function calculateMetrics(
   
   // Calculate blink rate
   let totalBlinks = 0;
-  let earliestTimestamp = Infinity;
-  let latestTimestamp = 0;
+  let totalDuration = 0;
   
   // Gather blink data from all filtered sessions
   filteredSessions.forEach(session => {
     if (session.blinkTimestamps && session.blinkTimestamps.length > 0) {
       // Add the number of blinks
       totalBlinks += session.blinkTimestamps.length;
-      
-      // Find the earliest and latest timestamps
-      const sessionEarliestTimestamp = Math.min(...session.blinkTimestamps);
-      const sessionLatestTimestamp = Math.max(...session.blinkTimestamps);
-      
-      if (sessionEarliestTimestamp < earliestTimestamp) {
-        earliestTimestamp = sessionEarliestTimestamp;
-      }
-      
-      if (sessionLatestTimestamp > latestTimestamp) {
-        latestTimestamp = sessionLatestTimestamp;
-      }
+      totalDuration += (new Date(session.endTime).getTime() / 1000) - (new Date(session.startTime).getTime() / 1000);
     }
   });
+
   
   // Calculate blink rate (blinks per minute)
   let blinkRate = 0;
-  if (totalBlinks > 0 && earliestTimestamp !== Infinity && latestTimestamp > earliestTimestamp) {
-    const timeSpanMinutes = (latestTimestamp - earliestTimestamp) / 60; // Convert seconds to minutes
-    blinkRate = totalBlinks / timeSpanMinutes;
+  if (totalBlinks > 0 && totalDuration > 0) {
+    const durationInMinutes = totalDuration / 60; // Convert seconds to minutes
+    blinkRate = totalBlinks / durationInMinutes;
   }
   
   // Calculate ambient light ratio (time spent in 'bright' / total time)
-  let totalTimeInDarkLight = 0;
-  let totalTimeSpan = 0;
+  let arrayAmbientLightRatios : any[] = [];
   
   // Using the already filtered sessions
   filteredSessions.forEach(session => {
-    // Convert session start/end times to unix timestamps if necessary
-    const sessionStartTime = typeof session.startTime === 'number' ? 
-      session.startTime : new Date(session.startTime).getTime() / 1000;
-    const sessionEndTime = typeof session.endTime === 'number' ? 
-      session.endTime : new Date(session.endTime).getTime() / 1000;
+    let totalTimeInDarkLight = 0;
     
-    // Calculate intersection of session time with requested time range
-    const effectiveStartTime = Math.max(sessionStartTime, startTime);
-    const effectiveEndTime = Math.min(sessionEndTime, endTime);
-    
-    // Only proceed if there's a valid intersection
-    if (effectiveEndTime > effectiveStartTime) {
-      // Add this session's duration to total time span
-      totalTimeSpan += (effectiveEndTime - effectiveStartTime);
+    if (session.lightStateChanges && session.lightStateChanges.length > 0) {
+      // Sort the light state changes by timestamp
+      let sessionDuration = (new Date(session.endTime).getTime() / 1000) - (new Date(session.startTime).getTime() / 1000);
+      const sortedLightChanges = [...session.lightStateChanges].sort((a, b) => a.timestamp - b.timestamp);
       
-      if (session.lightStateChanges && session.lightStateChanges.length > 0) {
-        // Sort the light state changes by timestamp
-        const sortedLightChanges = [...session.lightStateChanges].sort((a, b) => a.timestamp - b.timestamp);
+      // Process each light state segment
+      for (let i = 0; i < sortedLightChanges.length; i++) {
+        const currentChange = sortedLightChanges[i];
         
-        // First, handle case where we need to consider time before first light change
-        if (sortedLightChanges[0].timestamp > effectiveStartTime) {
-          // We need to assume a state for the time before first recorded change
-          // For this implementation, we'll assume "bright" (meaning no "dark" time contribution)
-          // If you want to change this assumption, modify this section
-        }
-        
-        // Process each light state segment
-        for (let i = 0; i < sortedLightChanges.length; i++) {
-          const currentChange = sortedLightChanges[i];
-          
-          // Determine the end of this light state
+        // If this is a "dark" state, calculate duration until next change
+        if (currentChange.ambient_light === "dark") {
           const nextTimestamp = (i < sortedLightChanges.length - 1) 
             ? sortedLightChanges[i + 1].timestamp 
-            : effectiveEndTime;
+            : new Date(session.endTime).getTime() / 1000; // Convert session end to timestamp
           
-          // Make sure this light state segment is within our time range
-          const segmentStart = Math.max(currentChange.timestamp, effectiveStartTime);
-          const segmentEnd = Math.min(nextTimestamp, effectiveEndTime);
+          totalTimeInDarkLight += (nextTimestamp - currentChange.timestamp);
           
-          // If the segment is valid and the light state is "dark", add its duration to the dark time
-          if (segmentEnd > segmentStart && currentChange.ambient_light === "dark") {
-            totalTimeInDarkLight += (segmentEnd - segmentStart);
-          }
         }
       }
+
+      let ambientLightRatio = (1 - (totalTimeInDarkLight / sessionDuration));
+      arrayAmbientLightRatios.push(ambientLightRatio);
     }
   });
   
-  // Calculate ratio of bright light time to total time
-  // (1 - dark time ratio) = bright time ratio
-  let ambientLightRatio = totalTimeSpan > 0 ? 1 - (totalTimeInDarkLight / totalTimeSpan) : 0;
-  
+  let ambientLightRatio = arrayAmbientLightRatios.length > 0 
+    ? arrayAmbientLightRatios.reduce((acc, ratio) => acc + ratio, 0) / arrayAmbientLightRatios.length 
+    : 0;
+
+
   // Calculate look away ratio (time spent looking away / total time)
-  let totalLookAwayTime = 0;
-  let lookAwayTimeSpan = 0;
-  
-  // Using the already filtered sessions
+  let arrayLookAwayRatios : any[] = [];
   filteredSessions.forEach(session => {
-    // Convert session start/end times to unix timestamps if necessary
-    const sessionStartTime = typeof session.startTime === 'number' ? 
-      session.startTime : new Date(session.startTime).getTime() / 1000;
-    const sessionEndTime = typeof session.endTime === 'number' ? 
-      session.endTime : new Date(session.endTime).getTime() / 1000;
-    
-    // Calculate intersection of session time with requested time range
-    const effectiveStartTime = Math.max(sessionStartTime, startTime);
-    const effectiveEndTime = Math.min(sessionEndTime, endTime);
-    
-    // Only proceed if there's a valid intersection
-    if (effectiveEndTime > effectiveStartTime) {
-      // Add this session's duration to total look away time span
-      lookAwayTimeSpan += (effectiveEndTime - effectiveStartTime);
+    let totalLookAwayTime = 0;
+    if (session.directionChanges && session.directionChanges.length > 0) {
+      // Sort the light state changes by timestamp
+      let sessionDuration = (new Date(session.endTime).getTime() / 1000) - (new Date(session.startTime).getTime() / 1000);
+      const sortedDirectionChanges = [...session.directionChanges].sort((a, b) => a.timestamp - b.timestamp);
       
-      if (session.directionChanges && session.directionChanges.length > 0) {
-        // Sort the direction changes by timestamp
-        const sortedDirectionChanges = [...session.directionChanges].sort((a, b) => a.timestamp - b.timestamp);
+      // Process each 1 direction segment
+      for (let i = 0; i < sortedDirectionChanges.length; i++) {
+        const currentDirChange = sortedDirectionChanges[i];
         
-        // First, handle case where we need to consider time before first direction change
-        if (sortedDirectionChanges[0].timestamp > effectiveStartTime) {
-          // We need to assume a direction for the time before first recorded change
-          // For this implementation, we'll assume "looking center" (meaning no "looking away" time contribution)
-          // If you want to change this assumption, modify this section
-        }
-        
-        // Process each direction state segment
-        for (let i = 0; i < sortedDirectionChanges.length; i++) {
-          const currentChange = sortedDirectionChanges[i];
-          
-          // Determine the end of this direction state
+        // If this is a "dark" state, calculate duration until next change
+        if (currentDirChange.looking_away === 1) {
           const nextTimestamp = (i < sortedDirectionChanges.length - 1) 
             ? sortedDirectionChanges[i + 1].timestamp 
-            : effectiveEndTime;
+            : new Date(session.endTime).getTime() / 1000; // Convert session end to timestamp
           
-          // Make sure this direction state segment is within our time range
-          const segmentStart = Math.max(currentChange.timestamp, effectiveStartTime);
-          const segmentEnd = Math.min(nextTimestamp, effectiveEndTime);
-          
-          // If the segment is valid and the looking_away is 1, add its duration to the look away time
-          if (segmentEnd > segmentStart && currentChange.looking_away === 1) {
-            totalLookAwayTime += (segmentEnd - segmentStart);
-          }
+          totalLookAwayTime += (nextTimestamp - currentDirChange.timestamp);
         }
       }
+
+      let lookAwayRatio = (totalLookAwayTime / sessionDuration);
+      arrayLookAwayRatios.push(lookAwayRatio);
     }
   });
   
-  // Calculate ratio of look away time to total time
-  let lookAwayRatio = lookAwayTimeSpan > 0 ? totalLookAwayTime / lookAwayTimeSpan : 0;
+  console.log("arrayLookAwayRatios", arrayLookAwayRatios);
+  let lookAwayRatio = arrayLookAwayRatios.length > 0 
+    ? arrayLookAwayRatios.reduce((acc, ratio) => acc + ratio, 0) / arrayLookAwayRatios.length 
+    : 0;
   
-  // Store the total requested time range for the denominator of the formula
-  const totalRequestedTimeRange = endTime - startTime;
   
   // Calculate percentage of time not close to the screen based on the formula
-  let totalNotCloseTime = 0;
-  
+  let arrayScreenDistances : any[] = [];
   filteredSessions.forEach(session => {
-    // Convert session start/end times to unix timestamps if necessary
-    const sessionStartTime = typeof session.startTime === 'number' ? 
-      session.startTime : new Date(session.startTime).getTime() / 1000;
-    const sessionEndTime = typeof session.endTime === 'number' ? 
-      session.endTime : new Date(session.endTime).getTime() / 1000;
-    
-    // Calculate intersection of session time with requested time range
-    const effectiveStartTime = Math.max(sessionStartTime, startTime);
-    const effectiveEndTime = Math.min(sessionEndTime, endTime);
-    
+    let totalNotCloseTime = 0;
     // Only proceed if there's a valid intersection
-    if (effectiveEndTime > effectiveStartTime) {
-      if (session.distanceChanges && session.distanceChanges.length > 0) {
-        // Sort the distance changes by start_time to ensure chronological order
-        const sortedDistanceChanges = [...session.distanceChanges].sort(
-          (a, b) => a.start_time - b.start_time
-        );
+    let sessionDuration = (new Date(session.endTime).getTime() / 1000) - (new Date(session.startTime).getTime() / 1000);
+    console.log("sessionDuration", sessionDuration);
+
+    if (session.distanceChanges && session.distanceChanges.length > 0) {
+      // Sort the distance changes by start_time to ensure chronological order
+      const sortedDistanceChanges = [...session.distanceChanges].sort(
+        (a, b) => a.start_time - b.start_time
+      );
+
+      // Process all distance changes
+      for (let i = 0; i < sortedDistanceChanges.length; i++) {
+        const current = sortedDistanceChanges[i];
         
-        console.log(`  Distance changes (${sortedDistanceChanges.length}):`);
-        sortedDistanceChanges.forEach((change, idx) => {
-          console.log(`    ${idx + 1}. ${change.distance}: ${new Date(change.start_time * 1000).toLocaleTimeString()} to ${new Date(change.end_time * 1000).toLocaleTimeString()}`);
-        });
-
-        // Find the last "close" segment start time before each "not close" segment
-        let lastCloseStartTime = null;
-
-        // Process all original distance changes to catch all transitions
-        for (let i = 0; i < sortedDistanceChanges.length; i++) {
-          const current = sortedDistanceChanges[i];
-          
-          // Skip if this change is outside our time range
-          if (current.end_time < effectiveStartTime || current.start_time > effectiveEndTime) {
-            continue;
-          }
-          
-          // Update the last close start time whenever we encounter a "close" segment
-          if (current.distance === "close") {
-            lastCloseStartTime = current.start_time;
-            continue;
-          }
-          
-          // For every "not close" segment (med or far), calculate the time difference
-          if (current.distance === "med" || current.distance === "far") {
-            const notCloseStartTime = current.start_time;
-            
-            // If we have a previous close segment, calculate the time difference
-            if (lastCloseStartTime !== null) {
-              const timeDifference = notCloseStartTime - lastCloseStartTime;
-              
-              
-              
-              if (timeDifference > 0) {
-                totalNotCloseTime += timeDifference;
-                console.log(`    Added to total: now ${totalNotCloseTime} seconds`);
-              } else {
-                console.log(`    No time added (difference <= 0)`);
-              }
-            } else {
-              // For the first "not close" segment with no previous "close", use session start time
-              const referenceTime = effectiveStartTime;
-              const timeDifference = notCloseStartTime - referenceTime;
-              
-              console.log(`  Initial not close segment (no previous close):`);
-              console.log(`    Not close start: ${new Date(notCloseStartTime * 1000).toLocaleTimeString()}`);
-              console.log(`    Session start: ${new Date(referenceTime * 1000).toLocaleTimeString()}`);
-              console.log(`    Time difference: ${timeDifference} seconds (${timeDifference/60} minutes)`);
-              
-              if (timeDifference > 0) {
-                totalNotCloseTime += timeDifference;
-                console.log(`    Added to total: now ${totalNotCloseTime} seconds`);
-              } else {
-                console.log(`    No time added (difference <= 0)`);
-              }
-            }
+        // For "not close" segments (med or far), calculate the duration
+        if (current.distance !== "close") {
+          const duration = current.end_time - current.start_time;
+          console.log("duration", duration);
+          if (duration > 0) {
+            totalNotCloseTime += duration;
           }
         }
       }
+
+      let screenDistance = (totalNotCloseTime / sessionDuration);
+      console.log("totalNotCloseTime", totalNotCloseTime);
+      arrayScreenDistances.push(screenDistance);
     }
   });
   
-  // Calculate ratio 
-  let screenDistance = totalRequestedTimeRange > 0 ? totalNotCloseTime / totalRequestedTimeRange : 0;
-  
-  // Ensure the ratio is between 0 and 1
-  screenDistance = Math.min(1, Math.max(0, screenDistance));
+  console.log("arrayScreenDistances", arrayScreenDistances);
+  let screenDistance = arrayScreenDistances.length > 0 
+    ? arrayScreenDistances.reduce((acc, ratio) => acc + ratio, 0) / arrayScreenDistances.length 
+    : 0;
+
+  console.log("blinkRate", blinkRate);
+  console.log("ambientLightRatio", ambientLightRatio);
+  console.log("lookAwayRatio", lookAwayRatio);
+  console.log("screenDistance", screenDistance);
   
   // Return the calculated metrics
   return {  
@@ -332,12 +228,21 @@ function calculateMetrics(
 
 
 function calculateEyeHealthScore(B: number, D: number, C: number, T: number): number {
-  return (
-    0.3 * (1 - Math.min(B / 14, 1)) +
-    0.2 * (1 - Math.min(D / 80, 1)) +
-    0.25 * (1 - Math.min(C / 30, 1)) +
-    0.25 * (1 - Math.min(T / 98, 1))
-  );
+  if (B === 0 && D === 0 && C === 0 && T === 0) {
+    return 0;
+  }
+
+  let part1 = 0.4 * (Math.min(B/14, 1))
+  let part2 = 0.3 * (Math.min(D/.80, 1))
+  let part3 = 0.1 * (Math.min(C/.35, 1))
+  let part4 = 0.2 * (Math.min(T/.98, 1))
+
+  console.log(part1, part2, part3, part4);
+
+  var score = part1 + part2 + part3 + part4
+  console.log(score);
+
+  return score;
 }
 
 export default function DashboardPage() {
@@ -385,20 +290,25 @@ export default function DashboardPage() {
 
   const generateTimeIntervals = () => {
     const intervals: { start: number; end: number; label: string; fullDate?: Date }[] = [];
-    const msPerDay = 24 * 60 * 60 * 1000;
+    const secondsPerDay = 24 * 60 * 60;
     
     if (viewMode === 'week') {
-      // Calculate the start of the week with offset
-      const now = new Date();
-      const startOfWeek = new Date(now);
-      startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay() + (weekOffset * 7));
+      // Get current date and find the most recent Sunday
+      const today = new Date();
+      const currentSunday = new Date(today);
+      currentSunday.setDate(today.getDate() - today.getDay());
       
-      // Generate 7 daily intervals
+      // Apply week offset to get the target Sunday
+      const targetSunday = new Date(currentSunday);
+      targetSunday.setDate(currentSunday.getDate() + (weekOffset * 7));
+      targetSunday.setHours(0, 0, 0, 0); // Reset time to start of day
+      
+      // Generate 7 daily intervals starting from the target Sunday
       for (let i = 0; i < 7; i++) {
-        const date = new Date(startOfWeek);
-        date.setDate(startOfWeek.getDate() + i);
-        const start = date.getTime();
-        const end = start + msPerDay;
+        const date = new Date(targetSunday);
+        date.setDate(targetSunday.getDate() + i);
+        const start = Math.floor(date.getTime() / 1000); // Convert to Unix timestamp
+        const end = start + secondsPerDay;
         intervals.push({
           start,
           end,
@@ -410,11 +320,11 @@ export default function DashboardPage() {
       // Generate 24 hourly intervals for the selected date
       const startOfDay = new Date(selectedDate);
       startOfDay.setHours(0, 0, 0, 0);
-      const msPerHour = 60 * 60 * 1000;
+      const secondsPerHour = 60 * 60;
       
       for (let i = 0; i < 24; i++) {
-        const start = startOfDay.getTime() + (i * msPerHour);
-        const end = start + msPerHour;
+        const start = Math.floor(startOfDay.getTime() / 1000) + (i * secondsPerHour); // Convert to Unix timestamp
+        const end = start + secondsPerHour;
         intervals.push({
           start,
           end,
@@ -445,17 +355,24 @@ export default function DashboardPage() {
     let count = 0;
 
     intervals.forEach(interval => {
-      const { D, C, T } = placeholderFunction(interval.start, interval.end);
-      totalD += Math.min(D / 80, 1);
-      totalC += Math.min(C / 30, 1);
-      totalT += Math.min(T / 98, 1);
-      count++;
+      const { ambientLightRatio, lookAwayRatio, screenDistance } = calculateMetrics(allUserSessions, interval.start, interval.end);
+      totalD += Math.min(ambientLightRatio / .80, 1);
+      totalC += Math.min(lookAwayRatio / .35, 1);
+      totalT += Math.min(screenDistance / .98, 1);
+      if (!(ambientLightRatio === 0 && lookAwayRatio === 0 && screenDistance === 0)) {
+        count++;
+      }
     });
 
+    console.log("totalD", totalD);
+    console.log("totalC", totalC);
+    console.log("totalT", totalT);
+    console.log("count", count);
+
     return {
-      D: (totalD / count) * 100,
-      C: (totalC / count) * 100,
-      T: (totalT / count) * 100
+      D: (totalD / count),
+      C: (totalC / count),
+      T: (totalT / count)
     };
   };
 
@@ -465,7 +382,7 @@ export default function DashboardPage() {
     labels: [label, 'Remaining'],
     datasets: [
       {
-        data: [value, 100 - value],
+        data: [value*100, 100 - (value*100)],
         backgroundColor: [
           'rgba(134, 239, 172, 0.8)',
           'rgba(255, 255, 255, 0.1)'
@@ -498,8 +415,9 @@ export default function DashboardPage() {
 
   const intervals = generateTimeIntervals();
   const healthScores = intervals.map(interval => {
-    const { B, D, C, T } = placeholderFunction(interval.start, interval.end);
-    return calculateEyeHealthScore(B, D, C, T);
+    const { blinkRate, ambientLightRatio, lookAwayRatio, screenDistance } = calculateMetrics(allUserSessions, interval.start, interval.end);
+    console.log(blinkRate, ambientLightRatio, lookAwayRatio, screenDistance);
+    return calculateEyeHealthScore(blinkRate, ambientLightRatio, lookAwayRatio, screenDistance);
   });
 
   const chartData = {
@@ -848,7 +766,7 @@ export default function DashboardPage() {
                       <Doughnut data={createDoughnutData(metrics.D, 'Distance')} options={doughnutOptions} />
                       <div className="absolute inset-0 flex items-center justify-center">
                         <div className="text-center">
-                          <div className="text-3xl font-bold text-white">{Math.round(metrics.D)}%</div>
+                          <div className="text-3xl font-bold text-white">{Math.round(metrics.D*100)}%</div>
                           <div className="text-sm text-gray-300">% Light Env</div>
                         </div>
                       </div>
@@ -859,7 +777,7 @@ export default function DashboardPage() {
                       <Doughnut data={createDoughnutData(metrics.C, 'Look Away')} options={doughnutOptions} />
                       <div className="absolute inset-0 flex items-center justify-center">
                         <div className="text-center">
-                          <div className="text-3xl font-bold text-white">{Math.round(metrics.C)}%</div>
+                          <div className="text-3xl font-bold text-white">{Math.round(metrics.C*100)}%</div>
                           <div className="text-sm text-gray-300">% Look Away</div>
                         </div>
                       </div>
@@ -870,7 +788,7 @@ export default function DashboardPage() {
                       <Doughnut data={createDoughnutData(metrics.T, 'Ambient Light')} options={doughnutOptions} />
                       <div className="absolute inset-0 flex items-center justify-center">
                         <div className="text-center">
-                          <div className="text-3xl font-bold text-white">{Math.round(metrics.T)}%</div>
+                          <div className="text-3xl font-bold text-white">{Math.round(metrics.T*100)}%</div>
                           <div className="text-sm text-gray-300">% Healthy Distance</div>
                         </div>
                       </div>

@@ -76,7 +76,7 @@ export default function WebcamPage() {
           blinkTimestamps: sessionData.blink_timestamps,
           stateChanges: sessionData.state_changes,
           distanceChanges: sessionData.distance_changes,
-          startTime: new Date().toISOString(),
+          startTime: sessionStart,
           userId: userId // Include the user ID if available
         }),
       });
