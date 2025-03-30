@@ -75,4 +75,35 @@ export async function POST(req: Request) {
       { status: 500 }
     );
   }
-} 
+}
+
+export async function GET(req: Request) {
+  try {
+    // Connect to database
+    await connectDB();
+
+    // Get user ID from the URL parameters
+    const { searchParams } = new URL(req.url);
+    const userId = searchParams.get('userId');
+
+    if (!userId) {
+      return NextResponse.json(
+        { message: 'User ID is required' },
+        { status: 400 }
+      );
+    }
+
+    // Find all sessions for the user
+    const sessions = await Session.find({ userId })
+      .sort({ startTime: -1 }) // Sort by startTime in descending order
+      .lean(); // Convert to plain JavaScript objects for better performance
+
+    return NextResponse.json(sessions);
+  } catch (error: any) {
+    console.error('Error fetching sessions:', error);
+    return NextResponse.json(
+      { message: error.message || 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
