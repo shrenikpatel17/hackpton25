@@ -355,6 +355,10 @@ export default function DashboardPage() {
     moveBackInterval: 55
   });
   const router = useRouter();
+  const [recommendations, setRecommendations] = useState<string[]>([]);
+  const [analysis, setAnalysis] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [recommendationsError, setRecommendationsError] = useState<string | null>(null);
 
   // Placeholder function that would normally calculate B, D, C, T values for a time range
   const placeholderFunction = (start: number, end: number) => {
@@ -609,6 +613,43 @@ export default function DashboardPage() {
     }
   };
 
+  const fetchRecommendations = async (metrics: any) => {
+    setIsLoading(true);
+    setRecommendationsError(null);
+    try {
+      const response = await fetch("/api/eye-care", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ metrics }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch recommendations');
+      }
+      
+      const data = await response.json();
+      if (data.analysis && Array.isArray(data.analysis)) {
+        setAnalysis(data.analysis);
+      } else {
+        setAnalysis([]);
+      }
+      if (data.suggestions && Array.isArray(data.suggestions)) {
+        setRecommendations(data.suggestions);
+      } else {
+        setRecommendations([]);
+      }
+    } catch (error) {
+      console.error("Error fetching recommendations:", error);
+      setRecommendationsError("Failed to load recommendations");
+      setAnalysis([]);
+      setRecommendations([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
     // Initialize Firebase
     const firebaseConfig = {
@@ -698,32 +739,46 @@ export default function DashboardPage() {
     // Fetch user data and sessions
     async function fetchUserData() {
       try {
+        console.log('Fetching user data...');
         const response = await fetch('/api/auth/user');
+        console.log('Response status:', response.status);
+        
         if (!response.ok) {
           if (response.status === 401) {
+            console.log('User not authenticated, redirecting to login...');
             router.push('/login');
             return;
           }
-          throw new Error('Failed to fetch user data');
+          const errorData = await response.json();
+          console.error('Error response:', errorData);
+          throw new Error(errorData.message || 'Failed to fetch user data');
         }
+        
         const data = await response.json();
+        console.log('User data received:', data);
         setUser(data);
 
         // Fetch sessions data if user has sessions
         if (data.sessions && data.sessions.length > 0) {
+          console.log('Fetching sessions data...');
           const sessionsResponse = await fetch(`/api/sessions?userId=${data._id}`);
+          console.log('Sessions response status:', sessionsResponse.status);
+          
           if (sessionsResponse.ok) {
             const sessionsData = await sessionsResponse.json();
-            console.log('Sessions data:', sessionsData);
+            console.log('Sessions data received:', sessionsData);
             setSessions(sessionsData);
             setAllUserSessions(sessionsData);
+          } else {
+            console.error('Failed to fetch sessions:', await sessionsResponse.text());
           }
         }
 
         // Initialize push notifications after user data is loaded
         await initializePushNotifications();
       } catch (err: any) {
-        setError(err.message);
+        console.error('Error in fetchUserData:', err);
+        setError(err.message || 'Failed to fetch user data');
       } finally {
         setLoading(false);
       }
@@ -731,6 +786,15 @@ export default function DashboardPage() {
 
     fetchUserData();
   }, [router]);
+
+  // Add a separate useEffect for recommendations
+  useEffect(() => {
+    // Only fetch recommendations when viewMode changes or when user explicitly requests new data
+    if (viewMode === 'week' || viewMode === 'day') {
+      const currentMetrics = calculateAverageMetrics();
+      fetchRecommendations(currentMetrics);
+    }
+  }, [viewMode, weekOffset, selectedDate]); // Only depend on view changes
 
   return (
     <>
@@ -929,17 +993,46 @@ export default function DashboardPage() {
             </div>
 
             <div className="bg-white/10 backdrop-blur-md p-8 rounded-xl mb-8">
-              <h2 className="text-2xl font-bold text-white mb-6">Suggestions</h2>
-              <div className="space-y-4">
-                <p className="text-gray-300 text-md">
-                  Based on your recent activity, here are some suggestions to improve your eye health:
-                </p>
-                <ul className="list-disc list-inside text-gray-300 text-md space-y-2">
-                  <li>Consider taking more frequent breaks to reduce eye strain</li>
-                  <li>Maintain an optimal viewing distance of 50-100 cm from your screen</li>
-                  <li>Ensure proper lighting in your workspace to minimize glare</li>
-                  <li>Practice the 20-20-20 rule: Every 20 minutes, look at something 20 feet away for 20 seconds</li>
-                </ul>
+              <h2 className="text-2xl font-bold text-white mb-6">Personalized Insights</h2>
+              
+              {/* Analysis Section */}
+              <div className="mb-8">
+                <h3 className="text-xl font-semibold text-white mb-4">Analysis</h3>
+                <div className="space-y-4">
+                  {isLoading ? (
+                    <p className="text-gray-300 text-md">Loading analysis...</p>
+                  ) : analysis.length > 0 ? (
+                    <ul className="text-gray-300 text-md space-y-2"> 
+                      {analysis.map((item, index) => (
+                        <li key={index}>{item}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-gray-300 text-md">No analysis available at the moment.</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Recommendations Section */}
+              <div>
+                <h3 className="text-xl font-semibold text-white mb-4">Recommendations</h3>
+                <div className="space-y-4">
+                  {recommendationsError ? (
+                    <p className="text-red-400 text-md">{recommendationsError}</p>
+                  ) : (
+                    <ul className="text-gray-300 text-md space-y-2">
+                      {isLoading ? (
+                        <li>Loading recommendations...</li>
+                      ) : recommendations.length > 0 ? (
+                        recommendations.map((recommendation, index) => (
+                          <li key={index}>{recommendation}</li>
+                        ))
+                      ) : (
+                        <li>No recommendations available at the moment.</li>
+                      )}
+                    </ul>
+                  )}
+                </div>
               </div>
             </div>
 

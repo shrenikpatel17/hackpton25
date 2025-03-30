@@ -27,8 +27,10 @@ yarn-error.log*
 # local env files
 .env*.local
 .env
+venv
 .firebase-credentials.json
 firebase-credentials.json
+myenv/
 
 # vercel
 .vercel
@@ -39,11 +41,7 @@ next-env.d.ts
 
 # python
 __pycache__/
-venv
-# local env files
-.env*.local
-.env
-.firebase-credentials.json
-firebase-credentials.json
+
+# package files
 package-lock.json
-myenv/
+package.json
