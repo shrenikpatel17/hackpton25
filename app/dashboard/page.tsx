@@ -167,7 +167,6 @@ function calculateMetrics(
     }
   });
   
-  console.log("arrayLookAwayRatios", arrayLookAwayRatios);
   let lookAwayRatio = arrayLookAwayRatios.length > 0 
     ? arrayLookAwayRatios.reduce((acc, ratio) => acc + ratio, 0) / arrayLookAwayRatios.length 
     : 0;
@@ -179,7 +178,6 @@ function calculateMetrics(
     let totalNotCloseTime = 0;
     // Only proceed if there's a valid intersection
     let sessionDuration = (new Date(session.endTime).getTime() / 1000) - (new Date(session.startTime).getTime() / 1000);
-    console.log("sessionDuration", sessionDuration);
 
     if (session.distanceChanges && session.distanceChanges.length > 0) {
       // Sort the distance changes by start_time to ensure chronological order
@@ -194,7 +192,6 @@ function calculateMetrics(
         // For "not close" segments (med or far), calculate the duration
         if (current.distance !== "close") {
           const duration = current.end_time - current.start_time;
-          console.log("duration", duration);
           if (duration > 0) {
             totalNotCloseTime += duration;
           }
@@ -202,20 +199,13 @@ function calculateMetrics(
       }
 
       let screenDistance = (totalNotCloseTime / sessionDuration);
-      console.log("totalNotCloseTime", totalNotCloseTime);
       arrayScreenDistances.push(screenDistance);
     }
   });
   
-  console.log("arrayScreenDistances", arrayScreenDistances);
   let screenDistance = arrayScreenDistances.length > 0 
     ? arrayScreenDistances.reduce((acc, ratio) => acc + ratio, 0) / arrayScreenDistances.length 
     : 0;
-
-  console.log("blinkRate", blinkRate);
-  console.log("ambientLightRatio", ambientLightRatio);
-  console.log("lookAwayRatio", lookAwayRatio);
-  console.log("screenDistance", screenDistance);
   
   // Return the calculated metrics
   return {  
@@ -237,10 +227,8 @@ function calculateEyeHealthScore(B: number, D: number, C: number, T: number): nu
   let part3 = 0.1 * (Math.min(C/.35, 1))
   let part4 = 0.2 * (Math.min(T/.98, 1))
 
-  console.log(part1, part2, part3, part4);
 
   var score = part1 + part2 + part3 + part4
-  console.log(score);
 
   return score;
 }
@@ -370,10 +358,6 @@ export default function DashboardPage() {
       }
     });
 
-    console.log("totalD", totalD);
-    console.log("totalC", totalC);
-    console.log("totalT", totalT);
-    console.log("count", count);
 
     return {
       D: (totalD / count),
@@ -422,7 +406,6 @@ export default function DashboardPage() {
   const intervals = generateTimeIntervals();
   const healthScores = intervals.map(interval => {
     const { blinkRate, ambientLightRatio, lookAwayRatio, screenDistance } = calculateMetrics(allUserSessions, interval.start, interval.end);
-    console.log(blinkRate, ambientLightRatio, lookAwayRatio, screenDistance);
     return calculateEyeHealthScore(blinkRate, ambientLightRatio, lookAwayRatio, screenDistance);
   });
 
