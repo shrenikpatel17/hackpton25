@@ -41,7 +41,7 @@ export default function Home() {
 
       <div className="min-h-screen bg-[#111E3B] flex flex-col md:flex-row justify-center items-center px-24 pt-26">
         <div className="max-w-3xl">
-          <h1 className="text-7xl font-Raleway font-[400] text-white font-bold mb-8 leading-tight">
+          <h1 className="text-7xl font-Raleway font-[500] text-white mb-8 leading-tight">
             Healthier vision starts here.
           </h1>
           <p className="text-xl text-gray-300 mb-12 max-w-2xl">
@@ -60,9 +60,9 @@ export default function Home() {
             </Link>
           </div>
         </div>
-        {/* <div className="hidden md:flex justify-center items-center ml-12">
-          <img src="/coolSVG.png" alt="Eye health illustration" className="max-w-md" />
-        </div> */}
+        <div className="hidden md:flex justify-center items-center ml-12">
+          <img style={{ animationDuration: '12s' }} src="/grainyCircle.png" alt="Eye health illustration" className="max-w-lg animate-spin duration-5000 rounded-full" />
+        </div>
       </div>
     </>
   );
