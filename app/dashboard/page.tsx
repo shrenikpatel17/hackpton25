@@ -684,8 +684,14 @@ export default function DashboardPage() {
             } else {
                 console.log('Notification permission denied.');
             }
-        } catch (error) {
+        } catch (error:any) {
             console.error('Error initializing push notifications:', error);
+            if (error.code) {
+                console.error('Error code:', error.code);
+            }
+            if (error.message) {
+                console.error('Error message:', error.message);
+            }
         }
     }
 
