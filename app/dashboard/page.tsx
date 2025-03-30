@@ -259,7 +259,13 @@ export default function DashboardPage() {
     lookAwayInterval: 85,
     moveBackInterval: 55
   });
+  const [aiAnalysis, setAiAnalysis] = useState<{
+    prediction: string;
+    suggestions: string;
+  } | null>(null);
   const router = useRouter();
+  
+  
 
   // Placeholder function that would normally calculate B, D, C, T values for a time range
   const placeholderFunction = (start: number, end: number) => {
@@ -527,6 +533,47 @@ export default function DashboardPage() {
     }
   };
 
+  const calculateAverageWeeklyScore = () => {
+    const intervals = generateTimeIntervals();
+    const scores = intervals.map(interval => {
+      const { blinkRate, ambientLightRatio, lookAwayRatio, screenDistance } = calculateMetrics(allUserSessions, interval.start, interval.end);
+      return calculateEyeHealthScore(blinkRate, ambientLightRatio, lookAwayRatio, screenDistance);
+    });
+    
+    const validScores = scores.filter(score => score > 0);
+    if (validScores.length === 0) return 0;
+    
+    return validScores.reduce((acc, score) => acc + score, 0) / validScores.length;
+  };
+
+  const fetchRecommendations = async () => {
+    try {
+      const averageScore = calculateAverageWeeklyScore();
+      console.log("Average weekly score:", averageScore);
+      
+      const response = await fetch('/api/eye-care', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          metrics: {
+            score: averageScore
+          }
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch recommendations');
+      }
+
+      const data = await response.json();
+      setAiAnalysis(data);
+    } catch (error) {
+      console.error('Error fetching recommendations:', error);
+    }
+  };
+
   useEffect(() => {
     // Initialize Firebase
     const firebaseConfig = {
@@ -616,32 +663,49 @@ export default function DashboardPage() {
     // Fetch user data and sessions
     async function fetchUserData() {
       try {
+        console.log('Fetching user data...');
         const response = await fetch('/api/auth/user');
+        console.log('Response status:', response.status);
+        
         if (!response.ok) {
           if (response.status === 401) {
+            console.log('User not authenticated, redirecting to login...');
             router.push('/login');
             return;
           }
-          throw new Error('Failed to fetch user data');
+          const errorData = await response.json();
+          console.error('Error response:', errorData);
+          throw new Error(errorData.message || 'Failed to fetch user data');
         }
+        
         const data = await response.json();
+        console.log('User data received:', data);
         setUser(data);
 
         // Fetch sessions data if user has sessions
         if (data.sessions && data.sessions.length > 0) {
+          console.log('Fetching sessions data...');
           const sessionsResponse = await fetch(`/api/sessions?userId=${data._id}`);
+          console.log('Sessions response status:', sessionsResponse.status);
+          
           if (sessionsResponse.ok) {
             const sessionsData = await sessionsResponse.json();
-            console.log('Sessions data:', sessionsData);
+            console.log('Sessions data received:', sessionsData);
             setSessions(sessionsData);
             setAllUserSessions(sessionsData);
+            
+            // Call fetchRecommendations after sessions are loaded
+            await fetchRecommendations();
+          } else {
+            console.error('Failed to fetch sessions:', await sessionsResponse.text());
           }
         }
 
         // Initialize push notifications after user data is loaded
         await initializePushNotifications();
       } catch (err: any) {
-        setError(err.message);
+        console.error('Error in fetchUserData:', err);
+        setError(err.message || 'Failed to fetch user data');
       } finally {
         setLoading(false);
       }
@@ -847,17 +911,37 @@ export default function DashboardPage() {
             </div>
 
             <div className="bg-white/10 backdrop-blur-md p-8 rounded-xl mb-8">
-              <h2 className="text-2xl font-bold text-white mb-6">Suggestions</h2>
-              <div className="space-y-4">
-                <p className="text-gray-300 text-md">
-                  Based on your recent activity, here are some suggestions to improve your eye health:
-                </p>
-                <ul className="list-disc list-inside text-gray-300 text-md space-y-2">
-                  <li>Consider taking more frequent breaks to reduce eye strain</li>
-                  <li>Maintain an optimal viewing distance of 50-100 cm from your screen</li>
-                  <li>Ensure proper lighting in your workspace to minimize glare</li>
-                  <li>Practice the 20-20-20 rule: Every 20 minutes, look at something 20 feet away for 20 seconds</li>
-                </ul>
+              <h2 className="text-2xl font-bold text-white mb-6">Personalized Insights</h2>
+              <div className="flex justify-between items-start">
+                {/* Prediction Section */}
+                <div className="flex-1 text-center">
+                  <h3 className="text-xl text-gray-300 mb-4">Myopia Risk</h3>
+                  <div className="text-6xl font-bold text-white">
+                    {aiAnalysis?.prediction || '--'}%
+                  </div>
+                </div>
+
+                {/* Suggestions Section */}
+                <div className="flex-1 pl-8">
+                  <h3 className="text-xl text-gray-300 mb-4">Recommendations</h3>
+                  <div className="space-y-4">
+                    {aiAnalysis?.suggestions ? (
+                      aiAnalysis.suggestions
+                        .split('\n')
+                        .filter((s: string) => s.trim().length > 0)
+                        .map((suggestion: string, index: number) => (
+                          <div key={index} className="flex items-start gap-3">
+                            <div className="w-6 h-6 rounded-full bg-emerald-400/20 flex items-center justify-center text-emerald-400">
+                              {index + 1}
+                            </div>
+                            <p className="text-white">{suggestion.trim()}</p>
+                          </div>
+                        ))
+                    ) : (
+                      <p className="text-gray-400">No recommendations available</p>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
 
