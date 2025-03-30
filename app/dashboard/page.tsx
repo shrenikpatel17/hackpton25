@@ -859,6 +859,13 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 </div>
+                <div className="flex justify-center mt-8">
+                  <span className="text-white/80">
+                    <span className="text-4xl font-bold">
+                    {(calculateMetrics(allUserSessions, intervals[0].start, intervals[0].end).blinkRate || 3.7).toFixed(1)}                    </span>
+                    <span className="text-lg ml-2">blinks / min</span>
+                  </span>
+                </div>
               </div>
 
               <div className="bg-white/10 backdrop-blur-md p-8 rounded-xl mb-8 flex-1">
