@@ -18,7 +18,7 @@ const sessionSchema = new mongoose.Schema({
 
   // Direction changes array exactly matching your Python output
   directionChanges: [{
-    looking_away: Number,  // 0 or 1
+    looking_away: Number,  // 0 - looking center or 1 - looking away
     timestamp: Number     // Unix timestamp from time.time()
   }],
 
@@ -34,7 +34,7 @@ const sessionSchema = new mongoose.Schema({
 
   // Distance changes from check-distance endpoint
   distanceChanges: [{
-    distance: String,
+    distance: String, // "close", "med", "far"
     start_time: Number,
     end_time: Number
   }],
