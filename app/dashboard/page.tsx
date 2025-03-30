@@ -5,6 +5,25 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { initializeApp } from 'firebase/app';
 import { getMessaging, getToken, onMessage } from 'firebase/messaging';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend
+} from 'chart.js';
+import { Bar } from 'react-chartjs-2';
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend
+);
 
 interface UserData {
   firstName: string;
@@ -27,12 +46,154 @@ interface SessionData {
   eyeDistance: number;
 }
 
+function calculateEyeHealthScore(B: number, D: number, C: number, T: number): number {
+  return (
+    0.3 * (1 - Math.min(B / 14, 1)) +
+    0.2 * (1 - Math.min(D / 80, 1)) +
+    0.25 * (1 - Math.min(C / 30, 1)) +
+    0.25 * (1 - Math.min(T / 98, 1))
+  );
+}
+
 export default function DashboardPage() {
   const [user, setUser] = useState<UserData | null>(null);
   const [sessions, setSessions] = useState<SessionData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [allUserSessions, setAllUserSessions] = useState<SessionData[]>([]);
+  const [viewMode, setViewMode] = useState<'week' | 'day'>('week');
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [weekOffset, setWeekOffset] = useState(0);
   const router = useRouter();
+
+  // Placeholder function that would normally calculate B, D, C, T values for a time range
+  const placeholderFunction = (start: number, end: number) => {
+    // This is where you would implement the actual logic to calculate these values
+    // For now, returning sample values
+    return {
+      B: Math.random() * 20, // Sample blink rate
+      D: Math.random() * 100, // Sample distance
+      C: Math.random() * 40, // Sample look away rate
+      T: Math.random() * 120, // Sample ambient light value
+    };
+  };
+
+  const generateTimeIntervals = () => {
+    const intervals: { start: number; end: number; label: string; fullDate?: Date }[] = [];
+    const msPerDay = 24 * 60 * 60 * 1000;
+    
+    if (viewMode === 'week') {
+      // Calculate the start of the week with offset
+      const now = new Date();
+      const startOfWeek = new Date(now);
+      startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay() + (weekOffset * 7));
+      
+      // Generate 7 daily intervals
+      for (let i = 0; i < 7; i++) {
+        const date = new Date(startOfWeek);
+        date.setDate(startOfWeek.getDate() + i);
+        const start = date.getTime();
+        const end = start + msPerDay;
+        intervals.push({
+          start,
+          end,
+          label: date.toLocaleDateString('en-US', { weekday: 'short' }),
+          fullDate: new Date(date)
+        });
+      }
+    } else {
+      // Generate 24 hourly intervals for the selected date
+      const startOfDay = new Date(selectedDate);
+      startOfDay.setHours(0, 0, 0, 0);
+      const msPerHour = 60 * 60 * 1000;
+      
+      for (let i = 0; i < 24; i++) {
+        const start = startOfDay.getTime() + (i * msPerHour);
+        const end = start + msPerHour;
+        intervals.push({
+          start,
+          end,
+          label: `${i}:00`
+        });
+      }
+    }
+    
+    return intervals;
+  };
+
+  const handleBarClick = (elements: any[]) => {
+    if (elements.length > 0 && viewMode === 'week') {
+      const index = elements[0].index;
+      const clickedInterval = intervals[index];
+      if (clickedInterval.fullDate) {
+        setSelectedDate(clickedInterval.fullDate);
+        setViewMode('day');
+      }
+    }
+  };
+
+  const intervals = generateTimeIntervals();
+  const healthScores = intervals.map(interval => {
+    const { B, D, C, T } = placeholderFunction(interval.start, interval.end);
+    return calculateEyeHealthScore(B, D, C, T);
+  });
+
+  const chartData = {
+    labels: intervals.map(interval => interval.label),
+    datasets: [
+      {
+        label: 'Health Score',
+        data: healthScores,
+        backgroundColor: healthScores.map(score => 
+          score >= 0.85 ? 'rgba(134, 239, 172, 0.8)' : 'rgba(252, 165, 165, 0.8)'
+        ),
+        borderColor: healthScores.map(score => 
+          score >= 0.85 ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)'
+        ),
+        borderWidth: 1,
+      },
+    ],
+  };
+
+  const chartOptions = {
+    responsive: true,
+    onClick: (_: any, elements: any[]) => handleBarClick(elements),
+    scales: {
+      y: {
+        beginAtZero: true,
+        max: 1,
+        ticks: {
+          color: 'white',
+        },
+        grid: {
+          color: 'rgba(255, 255, 255, 0.1)',
+        },
+      },
+      x: {
+        ticks: {
+          color: 'white',
+        },
+        grid: {
+          color: 'rgba(255, 255, 255, 0.1)',
+        },
+      },
+    },
+    plugins: {
+      legend: {
+        display: false,
+      },
+      title: {
+        display: true,
+        text: viewMode === 'week' 
+          ? `Eye Health Score - Week of ${intervals[0]?.fullDate?.toLocaleDateString()}`
+          : `Eye Health Score - ${selectedDate.toLocaleDateString()}`,
+        color: 'white',
+        font: {
+          size: 16,
+        },
+      },
+    },
+  };
 
   useEffect(() => {
     // Initialize Firebase
@@ -130,10 +291,12 @@ export default function DashboardPage() {
 
         // Fetch sessions data if user has sessions
         if (data.sessions && data.sessions.length > 0) {
-          const sessionsResponse = await fetch('/api/sessions');
+          const sessionsResponse = await fetch(`/api/sessions?userId=${data._id}`);
           if (sessionsResponse.ok) {
             const sessionsData = await sessionsResponse.json();
+            console.log('Sessions data:', sessionsData);
             setSessions(sessionsData);
+            setAllUserSessions(sessionsData);
           }
         }
 
@@ -218,6 +381,82 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </div>
+            </div>
+
+            <div className="bg-white/10 backdrop-blur-md p-8 rounded-xl mb-8">
+              <div className="flex justify-between items-center mb-4">
+                <div className="flex items-center gap-4">
+                  <h2 className="text-2xl font-bold text-white">Health Score Timeline</h2>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => viewMode === 'week' ? setWeekOffset(prev => prev - 1) : setSelectedDate(prev => {
+                        const newDate = new Date(prev);
+                        newDate.setDate(prev.getDate() - 1);
+                        return newDate;
+                      })}
+                      className="p-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-colors"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M15 18l-6-6 6-6"/>
+                      </svg>
+                    </button>
+                    {viewMode === 'day' && (
+                      <input
+                        type="date"
+                        value={selectedDate.toISOString().split('T')[0]}
+                        max={new Date().toISOString().split('T')[0]}
+                        onChange={(e) => setSelectedDate(new Date(e.target.value))}
+                        className="bg-white/20 text-white px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/40"
+                      />
+                    )}
+                    <button
+                      onClick={() => {
+                        const today = new Date();
+                        if (viewMode === 'week') {
+                          if (weekOffset < 0) {
+                            setWeekOffset(prev => prev + 1);
+                          }
+                        } else {
+                          const nextDay = new Date(selectedDate);
+                          nextDay.setDate(selectedDate.getDate() + 1);
+                          if (nextDay <= today) {
+                            setSelectedDate(nextDay);
+                          }
+                        }
+                      }}
+                      className="p-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-colors"
+                      disabled={viewMode === 'week' ? weekOffset === 0 : selectedDate >= new Date()}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M9 18l6-6-6-6"/>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                <div className="inline-flex rounded-lg overflow-hidden">
+                  <button
+                    className={`px-4 py-2 text-sm font-medium ${
+                      viewMode === 'week'
+                        ? 'bg-white text-black'
+                        : 'bg-white/20 text-white hover:bg-white/30'
+                    } transition-colors`}
+                    onClick={() => setViewMode('week')}
+                  >
+                    Week
+                  </button>
+                  <button
+                    className={`px-4 py-2 text-sm font-medium ${
+                      viewMode === 'day'
+                        ? 'bg-white text-black'
+                        : 'bg-white/20 text-white hover:bg-white/30'
+                    } transition-colors`}
+                    onClick={() => setViewMode('day')}
+                  >
+                    Day
+                  </button>
+                </div>
+              </div>
+              <Bar data={chartData} options={chartOptions} />
             </div>
 
             <div className="bg-white/10 backdrop-blur-md p-8 rounded-xl">
