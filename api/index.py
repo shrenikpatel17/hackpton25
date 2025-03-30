@@ -540,7 +540,7 @@ async def detect_ambient_light_endpoint(request: Request):
         brightness = process_ambient_light(frame)
         
         # Determine the current state based on brightness
-        current_state = "bright" if brightness >= 70 else "dark"
+        current_state = "light" if brightness >= 70 else "dark"
         current_time = time.time()
         
         # Track time spent in dark environment
