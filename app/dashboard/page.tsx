@@ -259,11 +259,13 @@ export default function DashboardPage() {
     lookAwayInterval: 85,
     moveBackInterval: 55
   });
+  const [aiAnalysis, setAiAnalysis] = useState<{
+    prediction: string;
+    suggestions: string;
+  } | null>(null);
   const router = useRouter();
-  const [recommendations, setRecommendations] = useState<string[]>([]);
-  const [analysis, setAnalysis] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [recommendationsError, setRecommendationsError] = useState<string | null>(null);
+  
+  
 
   // Placeholder function that would normally calculate B, D, C, T values for a time range
   const placeholderFunction = (start: number, end: number) => {
@@ -531,40 +533,44 @@ export default function DashboardPage() {
     }
   };
 
-  const fetchRecommendations = async (metrics: any) => {
-    setIsLoading(true);
-    setRecommendationsError(null);
+  const calculateAverageWeeklyScore = () => {
+    const intervals = generateTimeIntervals();
+    const scores = intervals.map(interval => {
+      const { blinkRate, ambientLightRatio, lookAwayRatio, screenDistance } = calculateMetrics(allUserSessions, interval.start, interval.end);
+      return calculateEyeHealthScore(blinkRate, ambientLightRatio, lookAwayRatio, screenDistance);
+    });
+    
+    const validScores = scores.filter(score => score > 0);
+    if (validScores.length === 0) return 0;
+    
+    return validScores.reduce((acc, score) => acc + score, 0) / validScores.length;
+  };
+
+  const fetchRecommendations = async () => {
     try {
-      const response = await fetch("/api/eye-care", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ metrics }),
-      });
+      const averageScore = calculateAverageWeeklyScore();
+      console.log("Average weekly score:", averageScore);
       
+      const response = await fetch('/api/eye-care', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          metrics: {
+            score: averageScore
+          }
+        })
+      });
+
       if (!response.ok) {
         throw new Error('Failed to fetch recommendations');
       }
-      
+
       const data = await response.json();
-      if (data.analysis && Array.isArray(data.analysis)) {
-        setAnalysis(data.analysis);
-      } else {
-        setAnalysis([]);
-      }
-      if (data.suggestions && Array.isArray(data.suggestions)) {
-        setRecommendations(data.suggestions);
-      } else {
-        setRecommendations([]);
-      }
+      setAiAnalysis(data);
     } catch (error) {
-      console.error("Error fetching recommendations:", error);
-      setRecommendationsError("Failed to load recommendations");
-      setAnalysis([]);
-      setRecommendations([]);
-    } finally {
-      setIsLoading(false);
+      console.error('Error fetching recommendations:', error);
     }
   };
 
@@ -687,6 +693,9 @@ export default function DashboardPage() {
             console.log('Sessions data received:', sessionsData);
             setSessions(sessionsData);
             setAllUserSessions(sessionsData);
+            
+            // Call fetchRecommendations after sessions are loaded
+            await fetchRecommendations();
           } else {
             console.error('Failed to fetch sessions:', await sessionsResponse.text());
           }
@@ -704,15 +713,6 @@ export default function DashboardPage() {
 
     fetchUserData();
   }, [router]);
-
-  // Add a separate useEffect for recommendations
-  useEffect(() => {
-    // Only fetch recommendations when viewMode changes or when user explicitly requests new data
-    if (viewMode === 'week' || viewMode === 'day') {
-      const currentMetrics = calculateAverageMetrics();
-      fetchRecommendations(currentMetrics);
-    }
-  }, [viewMode, weekOffset, selectedDate]); // Only depend on view changes
 
   return (
     <>
@@ -912,44 +912,35 @@ export default function DashboardPage() {
 
             <div className="bg-white/10 backdrop-blur-md p-8 rounded-xl mb-8">
               <h2 className="text-2xl font-bold text-white mb-6">Personalized Insights</h2>
-              
-              {/* Analysis Section */}
-              <div className="mb-8">
-                <h3 className="text-xl font-semibold text-white mb-4">Analysis</h3>
-                <div className="space-y-4">
-                  {isLoading ? (
-                    <p className="text-gray-300 text-md">Loading analysis...</p>
-                  ) : analysis.length > 0 ? (
-                    <ul className="text-gray-300 text-md space-y-2"> 
-                      {analysis.map((item, index) => (
-                        <li key={index}>{item}</li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-gray-300 text-md">No analysis available at the moment.</p>
-                  )}
+              <div className="flex justify-between items-start">
+                {/* Prediction Section */}
+                <div className="flex-1 text-center">
+                  <h3 className="text-xl text-gray-300 mb-4">Myopia Risk</h3>
+                  <div className="text-6xl font-bold text-white">
+                    {aiAnalysis?.prediction || '--'}%
+                  </div>
                 </div>
-              </div>
 
-              {/* Recommendations Section */}
-              <div>
-                <h3 className="text-xl font-semibold text-white mb-4">Recommendations</h3>
-                <div className="space-y-4">
-                  {recommendationsError ? (
-                    <p className="text-red-400 text-md">{recommendationsError}</p>
-                  ) : (
-                    <ul className="text-gray-300 text-md space-y-2">
-                      {isLoading ? (
-                        <li>Loading recommendations...</li>
-                      ) : recommendations.length > 0 ? (
-                        recommendations.map((recommendation, index) => (
-                          <li key={index}>{recommendation}</li>
+                {/* Suggestions Section */}
+                <div className="flex-1 pl-8">
+                  <h3 className="text-xl text-gray-300 mb-4">Recommendations</h3>
+                  <div className="space-y-4">
+                    {aiAnalysis?.suggestions ? (
+                      aiAnalysis.suggestions
+                        .split('\n')
+                        .filter((s: string) => s.trim().length > 0)
+                        .map((suggestion: string, index: number) => (
+                          <div key={index} className="flex items-start gap-3">
+                            <div className="w-6 h-6 rounded-full bg-emerald-400/20 flex items-center justify-center text-emerald-400">
+                              {index + 1}
+                            </div>
+                            <p className="text-white">{suggestion.trim()}</p>
+                          </div>
                         ))
-                      ) : (
-                        <li>No recommendations available at the moment.</li>
-                      )}
-                    </ul>
-                  )}
+                    ) : (
+                      <p className="text-gray-400">No recommendations available</p>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

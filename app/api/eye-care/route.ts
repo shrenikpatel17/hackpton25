@@ -8,78 +8,43 @@ export async function POST(request: Request) {
     const { metrics } = await request.json();
     console.log(metrics);
     
-    // Round the metrics values to integers, with safe handling for missing values
-    const roundedMetrics = {
-      B: metrics.B ? Math.round(metrics.B) : null,
-      D: metrics.D ? Math.round(metrics.D) : null,
-      C: metrics.C ? Math.round(metrics.C) : null,
-      T: metrics.T ? Math.round(metrics.T) : null
-    };
-
-    // Build metrics strings based on available values
-    const metricStrings = [];
-    if (roundedMetrics.B !== null) {
-      metricStrings.push(`- Average blink rate (${roundedMetrics.B} blinks/min, if more than 15 blinks, then is good)`);
-    }
-    if (roundedMetrics.D !== null) {
-      metricStrings.push(`- Percentage of time in bright environment versus a dark one (${roundedMetrics.D}%, if more than 80%, then is good)`);
-    }
-    if (roundedMetrics.C !== null) {
-      metricStrings.push(`- Percentage of time looking away from screen center (${roundedMetrics.C}%, if more than 30%, then is good)`);
-    }
-    if (roundedMetrics.T !== null) {
-      metricStrings.push(`- Percentage of time at safe distance 50cm from screen (${roundedMetrics.T}%, if more than 98%, then is good)`);
-    }
-
     // const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro-001" });
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-001" });
 
     const prompt = `
-    Analyze the following metrics that represent screen usage patterns:
-    ${metricStrings.join('\n')}
+    The health score is calculated based on the following formula:
+    \[
+      \text{score} = 0.4 \times \min\left(\frac{\text{Average blink rate (blinks/min)}}{14}, 1\right) 
+      + 0.3 \times \min\left(\frac{\text{Percentage of time in bright environment}}{0.80}, 1\right) 
+      + 0.1 \times \min\left(\frac{\text{Percentage of time looking away from screen center}}{0.35}, 1\right) 
+      + 0.2 \times \min\left(\frac{\text{Percentage of time at safe distance (50cm) from screen}}{0.98}, 1\right)
+    \]
 
-    Please provide your response in two clear sections:
+    This is the score value of me: ${metrics.score}
 
-    ANALYSIS:
-    Analyze each metric. Use "you" instead of "the user" when referring to the person.
+    Please provide your response in one clear sections:
 
     SUGGESTIONS:
-    Based on the analysis, provide three targeted suggestions.
-    Keep suggestions clear and actionable, avoid using any markdown formatting.
-    Use "you" instead of "the user" when giving suggestions.`;
+    give me three short phrases as suggestions, no complete sentences, just three shorst phrases in three lines, no asterisks, no serial numbers.`;
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const text = response.text();
-
-    // Split text into analysis and suggestions sections
-    const sections = text.split(/ANALYSIS:|SUGGESTIONS:/);
+    console.log("AI Response:", text);
     
-    // Process the analysis section
-    const analysis = sections[1]?.split('\n')
-      .map(line => line.trim())
-      .filter(line => line.length > 0)
-      .map(line => line.replace(/[#*`_]/g, ''))
-      .map(line => line.replace(/^[•·-]\s*/g, ''))
-      .filter(line => line.length > 0)
-      .map((line, index) => `${line.charAt(0).toUpperCase() + line.slice(1)}`) || [];
+    // Parse the response to extract prediction and suggestions
+    const sections = text.split('SUGGESTIONS:');
+    const suggestions = sections[0];
 
-    // Process the suggestions section
-    const suggestions = sections[2]?.split('\n')
-      .map(line => line.trim())
-      .filter(line => line.length > 0)
-      .map(line => line.replace(/[#*`_]/g, ''))
-      .map(line => line.replace(/^[•·-]\s*/g, ''))
-      .map((line, index) => `${line.charAt(0).toUpperCase() + line.slice(1)}`) || [];
-
+    console.log("Suggestions:", suggestions);
     return NextResponse.json({ 
-      analysis,
-      suggestions
+      "prediction": "43",
+      "suggestions": suggestions
     });
   } catch (error) {
-    console.error("Error generating recommendations:", error);
+    console.error("Error generating myopia prediction and suggestions:", error);
     return NextResponse.json(
-      { error: "Failed to generate recommendations" },
+      { error: "Failed to generate myopia prediction and suggestions" },
       { status: 500 }
     );
   }
